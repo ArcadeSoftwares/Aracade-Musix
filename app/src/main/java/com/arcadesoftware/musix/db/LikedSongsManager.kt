@@ -12,6 +12,11 @@ object LikedSongsManager {
         return set.contains(songId)
     }
 
+    fun getLikedSongIds(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getStringSet(KEY_LIKED_IDS, null)?.toSet() ?: emptySet()
+    }
+
     fun toggleLikeSong(context: Context, songId: String): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val set = prefs.getStringSet(KEY_LIKED_IDS, null)?.toMutableSet() ?: mutableSetOf()

@@ -37,7 +37,7 @@ import android.widget.Toast
 import com.arcadesoftware.musix.ui.screens.HomeScreen
 import com.arcadesoftware.musix.ui.screens.PlaylistScreen
 import com.arcadesoftware.musix.ui.screens.RecommendationsScreen
-import com.arcadesoftware.musix.ui.screens.DownloadsScreen
+
 import androidx.compose.ui.text.font.FontWeight
 import com.arcadesoftware.musix.ui.screens.PlaylistDetailScreen
 import android.content.Context
@@ -367,23 +367,29 @@ object PlayerManager {
             val connection = java.net.URL(streamUrl!!).openConnection() as java.net.HttpURLConnection
             connection.setRequestProperty("User-Agent", usedUserAgent)
             connection.setRequestProperty("Referer", "https://www.youtube.com/")
+            connection.setRequestProperty("Accept-Encoding", "identity") // no gzip so Content-Length is accurate
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 30_000
             connection.connect()
-            val contentLength = connection.contentLength.toLong()
+            val contentLength = connection.contentLengthLong
             destFile.parentFile?.mkdirs()
             var bytesCopied = 0L
+            var lastProgressBytes = 0L
+            val progressChunk = 256 * 1024L // emit progress every 256 KB to reduce main-thread pressure
             connection.inputStream.use { input ->
-                destFile.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
+                java.io.BufferedOutputStream(destFile.outputStream(), 256 * 1024).use { output ->
+                    val buffer = ByteArray(256 * 1024)
                     var bytes = input.read(buffer)
                     while (bytes >= 0) {
                         output.write(buffer, 0, bytes)
                         bytesCopied += bytes
-                        if (contentLength > 0) {
-                            val progressPercent = bytesCopied.toFloat() / contentLength
-                            onProgress(progressPercent)
+                        if (contentLength > 0 && bytesCopied - lastProgressBytes >= progressChunk) {
+                            lastProgressBytes = bytesCopied
+                            onProgress(bytesCopied.toFloat() / contentLength)
                         }
                         bytes = input.read(buffer)
                     }
+                    if (contentLength > 0) onProgress(1f) // ensure 100% is reported
                 }
             }
             connection.disconnect()
@@ -412,14 +418,26 @@ object PlayerManager {
             }
             if (localPath != null) {
                 val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(context.applicationContext)
+                val artistName = song.artists.firstOrNull()?.name ?: ""
+                val artistId = song.artists.firstOrNull()?.id
                 db.musicDao().insertDownloadedSong(
                     com.arcadesoftware.musix.db.entities.DownloadedSongEntity(
                         id = song.id,
                         title = song.title,
-                        artistName = song.artists.firstOrNull()?.name ?: "",
-                        artistId = song.artists.firstOrNull()?.id,
+                        artistName = artistName,
+                        artistId = artistId,
                         thumbnailUrl = song.thumbnail,
                         localFilePath = localPath
+                    )
+                )
+                // Also cache in play history so it shows in Recently Played
+                db.musicDao().insertPlayHistory(
+                    com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                        id = song.id,
+                        title = song.title,
+                        artistName = artistName,
+                        artistId = artistId,
+                        thumbnailUrl = song.thumbnail
                     )
                 )
             }
@@ -1045,7 +1063,7 @@ fun MainScreen() {
                 when (selectedTab) {
                     0 -> HomeScreen()
                     1 -> PlaylistScreen()
-                    2 -> DownloadsScreen()
+                    2 -> PlaylistScreen()
                     3 -> RecommendationsScreen()
                 }
             }
