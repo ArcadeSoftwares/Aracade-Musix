@@ -175,6 +175,7 @@ object PlayerManager {
                     override fun onSeekTo(pos: Long) {
                         exoPlayer?.seekTo(pos)
                         currentPosition.value = pos
+                        updatePlaybackState()
                     }
                 })
             }
