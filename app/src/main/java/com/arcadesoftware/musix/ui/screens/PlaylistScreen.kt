@@ -134,24 +134,30 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
                 }
             }
 
-            // ── Pinned cards row: Liked Songs + Liked Playlists ─────────
+            // ── Quick Access Row: Liked Songs & Downloads ─────────────────
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Liked Songs card
-                    LikedSongsCard(
-                        likedCount = likedSongIds.size,
-                        modifier = Modifier.weight(1f),
+                    PlaylistCard(
+                        title = "Liked Songs",
+                        subtitle = "${likedSongIds.size} songs",
+                        thumbnail = null,
+                        defaultIcon = Icons.Rounded.Favorite,
+                        iconContainerColor = Color(0xFFFEE2E2),
+                        iconColor = Color(0xFFEF4444),
                         onClick = { /* TODO open liked songs list */ }
                     )
-                    // Downloaded Songs card
-                    DownloadedCountCard(
-                        count = downloadedSongs.size,
-                        modifier = Modifier.weight(1f),
+                    PlaylistCard(
+                        title = "Downloads",
+                        subtitle = "${downloadedSongs.size} songs",
+                        thumbnail = null,
+                        defaultIcon = Icons.Rounded.DownloadDone,
+                        iconContainerColor = Color(0xFFDCFCE7),
+                        iconColor = Color(0xFF22C55E),
                         onClick = { /* scroll handled by the list below */ }
                     )
                 }
@@ -720,65 +726,72 @@ private fun UserPlaylistDetailScreen(
 
             itemsIndexed(songs) { index, songEntity ->
                 val isPlaying = PlayerManager.currentSong.collectAsState().value?.id == songEntity.id
-                Row(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { PlayerManager.playQueue(songs.map { it.toSongItem() }, index) }
-                        .background(if (isPlaying) MaterialTheme.colorScheme.primary.copy(0.07f) else Color.Transparent)
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPlaying) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        }
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                    Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.Center) {
-                        if (isPlaying) MusicBarsAnimation()
-                        else Text("${index + 1}", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(0.4f))
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    AsyncImage(
-                        model = songEntity.thumbnailUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(10.dp))
-                    )
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            songEntity.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            songEntity.artistName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-                    // Remove from playlist
-                    IconButton(
-                        onClick = {
-                            scope.launch(Dispatchers.IO) {
-                                db.musicDao().removeSongFromPlaylist(playlist.id, songEntity.id)
-                            }
-                        },
-                        modifier = Modifier.size(36.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { PlayerManager.playQueue(songs.map { it.toSongItem() }, index) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Rounded.RemoveCircleOutline,
-                            contentDescription = "Remove",
-                            tint = MaterialTheme.colorScheme.onSurface.copy(0.35f),
-                            modifier = Modifier.size(20.dp)
+                        Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.Center) {
+                            if (isPlaying) MusicBarsAnimation()
+                            else Text("${index + 1}", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(0.4f))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        AsyncImage(
+                            model = songEntity.thumbnailUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(10.dp))
                         )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                songEntity.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                songEntity.artistName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                        // Remove from playlist
+                        IconButton(
+                            onClick = {
+                                scope.launch(Dispatchers.IO) {
+                                    db.musicDao().removeSongFromPlaylist(playlist.id, songEntity.id)
+                                }
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.RemoveCircleOutline,
+                                contentDescription = "Remove",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(0.35f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
-                }
-                if (index < songs.size - 1) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 84.dp, end = 20.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(0.3f),
-                        thickness = 0.5.dp
-                    )
                 }
             }
         }
@@ -801,104 +814,15 @@ private fun LibrarySectionHeader(title: String) {
 }
 
 @Composable
-private fun LikedSongsCard(likedCount: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .height(110.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(Color(0xFFBB5CD4), Color(0xFF6B3FA0))
-                )
-            )
-            .clickable(onClick = onClick)
-            .padding(16.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-            Icon(
-                Icons.Rounded.Favorite,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
-            )
-            Column {
-                Text(
-                    "Liked Songs",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    "$likedCount songs",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(0.75f)
-                )
-            }
-        }
-        Icon(
-            Icons.AutoMirrored.Rounded.ArrowForwardIos,
-            contentDescription = null,
-            tint = Color.White.copy(0.6f),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(16.dp)
-        )
-    }
-}
-
-@Composable
-private fun DownloadedCountCard(count: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .height(110.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(Color(0xFF1A7E4C), Color(0xFF0F5A35))
-                )
-            )
-            .clickable(onClick = onClick)
-            .padding(16.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-            Icon(
-                Icons.Rounded.DownloadDone,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
-            )
-            Column {
-                Text(
-                    "Downloads",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    "$count songs",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(0.75f)
-                )
-            }
-        }
-        Icon(
-            Icons.AutoMirrored.Rounded.ArrowForwardIos,
-            contentDescription = null,
-            tint = Color.White.copy(0.6f),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(16.dp)
-        )
-    }
-}
-
-@Composable
 private fun PlaylistCard(
     title: String,
     subtitle: String,
     thumbnail: String?,
     onClick: () -> Unit,
-    onDeleteClick: (() -> Unit)? = null
+    onDeleteClick: (() -> Unit)? = null,
+    defaultIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.QueueMusic,
+    iconContainerColor: Color = MaterialTheme.colorScheme.primary.copy(0.12f),
+    iconColor: Color = MaterialTheme.colorScheme.primary
 ) {
     Column(
         modifier = Modifier
@@ -923,13 +847,13 @@ private fun PlaylistCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.primary.copy(0.12f)),
+                        .background(iconContainerColor),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Rounded.QueueMusic,
+                        defaultIcon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = iconColor,
                         modifier = Modifier.size(48.dp)
                     )
                 }
