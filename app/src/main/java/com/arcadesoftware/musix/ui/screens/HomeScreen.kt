@@ -347,10 +347,14 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
             if (isLoading && homePage?.sections.isNullOrEmpty()) {
                 item {
-                    HomeSectionSkeleton(isFeatured = true)
+                    SpeedDialSkeleton()
+                }
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FeaturedStackSkeleton()
                 }
                 items(2) {
-                    HomeSectionSkeleton(isFeatured = false)
+                    HomeSectionSkeleton()
                 }
             } else {
                 if (isLoading) {
@@ -430,25 +434,95 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 }
 
 @Composable
-fun HomeSectionSkeleton(isFeatured: Boolean = false) {
+fun SpeedDialSkeleton() {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(horizontal = 16.dp)
+    ) {
+        for (i in 0 until 3) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .shimmerEffect()
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .shimmerEffect()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FeaturedStackSkeleton() {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(150.dp)
+                .height(24.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .shimmerEffect()
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(380.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            // Background card 2 (bottom)
+            Box(
+                modifier = Modifier
+                    .graphicsLayer(scaleX = 0.88f, scaleY = 0.88f, rotationZ = -4f)
+                    .offset(y = (-32).dp)
+                    .width(300.dp)
+                    .height(340.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .shimmerEffect()
+            )
+            // Background card 1 (middle)
+            Box(
+                modifier = Modifier
+                    .graphicsLayer(scaleX = 0.94f, scaleY = 0.94f, rotationZ = 4f)
+                    .offset(y = (-16).dp)
+                    .width(300.dp)
+                    .height(340.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .shimmerEffect()
+            )
+            // Top card
+            Box(
+                modifier = Modifier
+                    .width(300.dp)
+                    .height(340.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .shimmerEffect()
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeSectionSkeleton() {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
         Box(modifier = Modifier.width(150.dp).height(24.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
-        if (isFeatured) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(2) {
-                    Box(modifier = Modifier.width(320.dp).height(360.dp).clip(RoundedCornerShape(24.dp)).shimmerEffect())
-                }
-            }
-        } else {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(4) {
-                    Column(modifier = Modifier.width(160.dp)) {
-                        Box(modifier = Modifier.size(160.dp).clip(RoundedCornerShape(12.dp)).shimmerEffect())
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Box(modifier = Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(modifier = Modifier.fillMaxWidth(0.6f).height(12.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
-                    }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            items(4) {
+                Column(modifier = Modifier.width(160.dp)) {
+                    Box(modifier = Modifier.size(160.dp).clip(RoundedCornerShape(12.dp)).shimmerEffect())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(modifier = Modifier.fillMaxWidth(0.6f).height(12.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
                 }
             }
         }
@@ -492,113 +566,138 @@ fun SwipeableCardStack(
     ) {
         // Show up to 3 cards in the stack
         for (i in 2 downTo 0) {
-            val isTopCard = i == 0
-            val cardIndex = if (isTopCard) {
-                activeIndex
+            val cardIndex = if (isSwipingRight) {
+                // Swiping right: previous card comes in from the left on top
+                when (i) {
+                    0 -> ((activeIndex - 1) % items.size + items.size) % items.size // Previous card
+                    1 -> activeIndex // Current card
+                    else -> (activeIndex + 1) % items.size // Next card
+                }
             } else {
-                if (isSwipingRight) {
-                    ((activeIndex - i) % items.size + items.size) % items.size
-                } else {
-                    (activeIndex + i) % items.size
+                // Swiping left: current card slides out to the left
+                when (i) {
+                    0 -> activeIndex // Current card
+                    1 -> (activeIndex + 1) % items.size // Next card
+                    else -> (activeIndex + 2) % items.size // Second next card
                 }
             }
 
             val cardItem = items[cardIndex]
 
             key(cardItem.id) {
+                val swipeProgress = (kotlin.math.abs(swipeX.value) / 1020f).coerceIn(0f, 1f)
+
                 // Background card styling for stack depth
-                val scale = when (i) {
-                    0 -> 1f
-                    1 -> 0.94f
-                    2 -> 0.88f
-                    else -> 0.82f
-                }
-                
-                val offsetY = when (i) {
-                    0 -> 0.dp
-                    1 -> (-16).dp
-                    2 -> (-32).dp
-                    else -> (-48).dp
+                val scale: Float
+                val offsetY: Float
+                val rotation: Float
+                val offsetX: Float
+
+                if (isSwipingRight) {
+                    // Previous card sliding in from left on top of the stack
+                    when (i) {
+                        0 -> { // Previous card coming in
+                            scale = 0.94f + 0.06f * swipeProgress
+                            offsetY = 0f
+                            rotation = 0f
+                            offsetX = -340f * (1f - swipeProgress)
+                        }
+                        1 -> { // Current card retreating to middle
+                            scale = 1f - 0.06f * swipeProgress
+                            offsetY = -16f * swipeProgress
+                            rotation = 4f * swipeProgress
+                            offsetX = 0f
+                        }
+                        else -> { // Next card retreating to bottom
+                            scale = 0.94f - 0.06f * swipeProgress
+                            offsetY = -16f - 16f * swipeProgress
+                            rotation = 4f - 8f * swipeProgress
+                            offsetX = 0f
+                        }
+                    }
+                } else {
+                    // Current card sliding out to the left
+                    when (i) {
+                        0 -> { // Current card swiping out
+                            scale = 1f
+                            offsetY = 0f
+                            rotation = 0f
+                            offsetX = swipeX.value / 3f
+                        }
+                        1 -> { // Next card scaling up to front
+                            scale = 0.94f + 0.06f * swipeProgress
+                            offsetY = -16f + 16f * swipeProgress
+                            rotation = 4f * (1f - swipeProgress)
+                            offsetX = 0f
+                        }
+                        else -> { // Second next card scaling up to middle
+                            scale = 0.88f + 0.06f * swipeProgress
+                            offsetY = -32f + 16f * swipeProgress
+                            rotation = -4f + 8f * swipeProgress
+                            offsetX = 0f
+                        }
+                    }
                 }
 
-                val baseRotation = when (i) {
-                    0 -> 0f
-                    1 -> 4f
-                    2 -> -4f
-                    else -> 0f
-                }
+                // Apply swipe gestures to the activeIndex card (which is in the center at start of swipe)
+                val isTargetForGestures = cardIndex == activeIndex
 
-                // Apply swipe dynamics only to the top card in the stack
-                val dragModifier = if (isTopCard) {
-                    Modifier
-                        .offset(
-                            x = (swipeX.value / 3f).dp,
-                            y = 0.dp
-                        )
-                        .graphicsLayer(
-                            rotationZ = 0f // Straight horizontal slide-out (no circular motion)
-                        )
-                        .pointerInput(Unit) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    if (isAnimating) return@detectHorizontalDragGestures
-                                    coroutineScope.launch {
-                                        val targetX = swipeX.value
-                                        if (kotlin.math.abs(targetX) > 300f) {
-                                            isAnimating = true
-                                            // Swipe card off screen
-                                            val swipeDirection = if (targetX > 0) 1020f else -1020f
-                                            swipeX.animateTo(
-                                                targetValue = swipeDirection,
-                                                animationSpec = tween(durationMillis = 300)
-                                            )
-                                            
-                                            // Swipe right (targetX > 0) goes to previous card, swipe left (targetX < 0) goes to next card
-                                            if (targetX > 0) {
-                                                currentIndex--
-                                            } else {
-                                                currentIndex++
-                                            }
-                                            swipeX.snapTo(0f)
-                                            isAnimating = false
-                                        } else {
-                                            // Snap card back to center
-                                            swipeX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-                                        }
-                                    }
-                                },
-                                onHorizontalDrag = { change, dragAmount ->
-                                    if (isAnimating) return@detectHorizontalDragGestures
-                                    change.consume()
-                                    coroutineScope.launch {
-                                        swipeX.snapTo(swipeX.value + dragAmount)
+                val dragModifier = if (isTargetForGestures) {
+                    Modifier.pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (isAnimating) return@detectHorizontalDragGestures
+                                coroutineScope.launch {
+                                    val targetX = swipeX.value
+                                    if (targetX < -300f) {
+                                        isAnimating = true
+                                        // Swipe current card off screen left
+                                        swipeX.animateTo(
+                                            targetValue = -1020f,
+                                            animationSpec = tween(durationMillis = 300)
+                                        )
+                                        currentIndex++
+                                        swipeX.snapTo(0f)
+                                        isAnimating = false
+                                    } else if (targetX > 300f) {
+                                        isAnimating = true
+                                        // Pull previous card fully to center
+                                        swipeX.animateTo(
+                                            targetValue = 1020f,
+                                            animationSpec = tween(durationMillis = 300)
+                                        )
+                                        currentIndex--
+                                        swipeX.snapTo(0f)
+                                        isAnimating = false
+                                    } else {
+                                        // Snap back to center / snap previous card back off-screen
+                                        swipeX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
                                     }
                                 }
-                            )
-                        }
-                } else {
-                    // Background cards scale up, float down, and rotate to transition to top card state
-                    val swipeProgress = (kotlin.math.abs(swipeX.value) / 1020f).coerceIn(0f, 1f)
-                    val targetScale = scale + (0.06f * swipeProgress)
-                    val targetOffsetY = offsetY + (16.dp * swipeProgress)
-                    val targetRotation = if (i == 1) {
-                        baseRotation * (1f - swipeProgress)
-                    } else {
-                        baseRotation + (8f * swipeProgress) // moves from -4f to +4f
-                    }
-                    Modifier
-                        .graphicsLayer(
-                            scaleX = targetScale,
-                            scaleY = targetScale,
-                            rotationZ = targetRotation
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                if (isAnimating) return@detectHorizontalDragGestures
+                                change.consume()
+                                coroutineScope.launch {
+                                    swipeX.snapTo(swipeX.value + dragAmount)
+                                }
+                            }
                         )
-                        .offset(y = targetOffsetY)
+                    }
+                } else {
+                    Modifier
                 }
 
                 FeaturedCard(
                     item = cardItem,
                     modifier = Modifier
                         .then(dragModifier)
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            rotationZ = rotation
+                        )
+                        .offset(x = offsetX.dp, y = offsetY.dp)
                         .width(300.dp)
                         .height(340.dp)
                 )
