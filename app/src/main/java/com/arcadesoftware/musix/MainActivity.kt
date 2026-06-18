@@ -1616,12 +1616,25 @@ fun MiniPlayer(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    var showAddToPlaylist by remember { mutableStateOf(false) }
+                    val addSong = currentSong as? SongItem
                     Icon(
                         imageVector = Icons.Rounded.AddCircleOutline,
                         contentDescription = "Add to Playlist",
                         tint = contentColor.copy(0.8f),
-                        modifier = Modifier.size(28.dp).then(consumeClicksModifier)
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) { if (addSong != null) showAddToPlaylist = true }
                     )
+                    if (showAddToPlaylist && addSong != null) {
+                        com.arcadesoftware.musix.components.AddToPlaylistSheet(
+                            song = addSong,
+                            onDismiss = { showAddToPlaylist = false }
+                        )
+                    }
                     val downloadContext = LocalContext.current
                     val db = remember(downloadContext) { com.arcadesoftware.musix.db.AppDatabase.getDatabase(downloadContext) }
 

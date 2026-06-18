@@ -53,6 +53,8 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
     private val db = AppDatabase.getDatabase(application)
     val downloadedSongs: StateFlow<List<DownloadedSongEntity>> = db.musicDao().getDownloadedSongs()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val userPlaylists: StateFlow<List<com.arcadesoftware.musix.db.entities.PlaylistEntity>> =
+        db.musicDao().getPlaylists().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     fun deleteSong(songId: String, localFilePath: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -61,12 +63,28 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
             if (file.exists()) file.delete()
         }
     }
+
+    fun createPlaylist(name: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.musicDao().insertPlaylist(
+                com.arcadesoftware.musix.db.entities.PlaylistEntity(name = name)
+            )
+        }
+    }
+
+    fun deletePlaylist(playlistId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.musicDao().clearPlaylistSongs(playlistId)
+            db.musicDao().deletePlaylist(playlistId)
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
     val downloadedSongs by viewModel.downloadedSongs.collectAsState()
+    val userPlaylists by viewModel.userPlaylists.collectAsState()
     val context = LocalContext.current
     val downloadProgressMap by PlayerManager.downloadProgressMap.collectAsState()
 
@@ -74,9 +92,12 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
     var likedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
 
-    // Sheet state for song options
+    // Sheet states
     var optionsSong by remember { mutableStateOf<DownloadedSongEntity?>(null) }
     val optionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showAddToPlaylistForSong by remember { mutableStateOf<DownloadedSongEntity?>(null) }
+    var showNewPlaylistDialog by remember { mutableStateOf(false) }
+    var newPlaylistNameInput by remember { mutableStateOf("") }
 
     // Refresh liked data when playlist detail closes
     LaunchedEffect(activePlaylistDetail) {
@@ -182,6 +203,117 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
                     }
                 }
             }
+
+            // ── My Playlists section ─────────────────────────────────────
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    LibrarySectionHeader(title = "My Playlists")
+                    TextButton(
+                        onClick = { showNewPlaylistDialog = true }
+                    ) {
+                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("New", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            if (userPlaylists.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.5f))
+                            .clickable { showNewPlaylistDialog = true }
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Rounded.PlaylistAdd,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "Create your first playlist",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "Tap to add a new playlist",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                items(userPlaylists, key = { it.id }) { playlist ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.QueueMusic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                playlist.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                            Text(
+                                "Playlist",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { viewModel.deletePlaylist(playlist.id) }) {
+                            Icon(
+                                Icons.Rounded.Delete,
+                                contentDescription = "Delete playlist",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(0.35f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 84.dp, end = 20.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(0.3f),
+                        thickness = 0.5.dp
+                    )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(8.dp)) }
 
             // ── Downloaded Songs section ─────────────────────────────────
             item {
@@ -361,6 +493,15 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
                     PlayerManager.queue.value = current
                 }
             )
+            // Add to playlist
+            BottomSheetOption(
+                icon = Icons.Rounded.PlaylistAdd,
+                label = "Add to Playlist",
+                onClick = {
+                    showAddToPlaylistForSong = song
+                    optionsSong = null
+                }
+            )
             // Delete
             BottomSheetOption(
                 icon = Icons.Rounded.Delete,
@@ -374,7 +515,52 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
+
+    // ── New Playlist Dialog ───────────────────────────────────────────────────
+    if (showNewPlaylistDialog) {
+        var dialogName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showNewPlaylistDialog = false; dialogName = "" },
+            title = { Text("New Playlist", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = dialogName,
+                    onValueChange = { dialogName = it },
+                    placeholder = { Text("Playlist name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (dialogName.isNotBlank()) {
+                            viewModel.createPlaylist(dialogName.trim())
+                            showNewPlaylistDialog = false
+                            dialogName = ""
+                        }
+                    },
+                    enabled = dialogName.isNotBlank()
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewPlaylistDialog = false; dialogName = "" }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // ── Add to Playlist Sheet (from MoreVert) ─────────────────────────────────
+    showAddToPlaylistForSong?.let { song ->
+        com.arcadesoftware.musix.components.AddToPlaylistSheet(
+            song = song.toSongItem(),
+            onDismiss = { showAddToPlaylistForSong = null }
+        )
+    }
 }
+
 
 // ─── Reusable composables ────────────────────────────────────────────────────
 

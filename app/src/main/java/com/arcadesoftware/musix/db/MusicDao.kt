@@ -49,7 +49,7 @@ interface MusicDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlaylistSong(playlistSongEntity: PlaylistSongEntity)
 
-    // Joins to get songs for a playlist
+    // Joins to get songs for a playlist (from play_history)
     @Query("""
         SELECT play_history.* FROM play_history 
         INNER JOIN playlist_songs ON play_history.id = playlist_songs.songId 
@@ -57,4 +57,16 @@ interface MusicDao {
         ORDER BY playlist_songs.position ASC
     """)
     fun getSongsForPlaylist(playlistId: Long): Flow<List<PlayHistoryEntity>>
+
+    @Query("SELECT COUNT(*) FROM playlist_songs WHERE playlistId = :playlistId")
+    fun getSongCountForPlaylist(playlistId: Long): Flow<Int>
+
+    @Query("DELETE FROM playlists WHERE id = :playlistId")
+    fun deletePlaylist(playlistId: Long)
+
+    @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")
+    fun removeSongFromPlaylist(playlistId: Long, songId: String)
+
+    @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId")
+    fun clearPlaylistSongs(playlistId: Long)
 }

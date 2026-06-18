@@ -74,7 +74,7 @@ class PlaybackService : Service() {
 
         PlayerManager.triggerNotificationUpdate()
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     fun updateForegroundNotification(notification: Notification, isPlaying: Boolean) {
@@ -94,10 +94,13 @@ class PlaybackService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // If we are paused, stop the service completely when the user swiped the app away from recents
-        if (PlayerManager.isPlaying.value == false) {
-            stopSelf()
-        }
+        // App swiped from recents → always stop service and release player
+        PlayerManager.exoPlayer?.stop()
+        PlayerManager.exoPlayer?.release()
+        PlayerManager.exoPlayer = null
+        PlayerManager.isPlaying.value = false
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
