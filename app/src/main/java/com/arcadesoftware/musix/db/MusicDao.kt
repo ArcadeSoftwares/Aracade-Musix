@@ -30,11 +30,11 @@ interface MusicDao {
     @Query("SELECT * FROM downloaded_songs ORDER BY downloadTimestamp DESC")
     fun getDownloadedSongs(): Flow<List<DownloadedSongEntity>>
 
-    // @Query("SELECT * FROM downloaded_songs WHERE id = :songId")
-    // fun getDownloadedSong(songId: String): DownloadedSongEntity?
+    @Query("SELECT * FROM downloaded_songs WHERE id = :songId")
+    fun getDownloadedSong(songId: String): DownloadedSongEntity?
 
-    // @Query("DELETE FROM downloaded_songs WHERE id = :songId")
-    // fun removeDownloadedSong(songId: String)
+    @Query("DELETE FROM downloaded_songs WHERE id = :songId")
+    fun removeDownloadedSong(songId: String)
 
     // --- Playlists ---
     @Insert(onConflict = OnConflictStrategy.IGNORE)

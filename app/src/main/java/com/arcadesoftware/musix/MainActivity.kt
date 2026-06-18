@@ -37,8 +37,12 @@ import android.widget.Toast
 import com.arcadesoftware.musix.ui.screens.HomeScreen
 import com.arcadesoftware.musix.ui.screens.PlaylistScreen
 import com.arcadesoftware.musix.ui.screens.RecommendationsScreen
+import com.arcadesoftware.musix.ui.screens.DownloadsScreen
 import androidx.compose.ui.text.font.FontWeight
 import com.arcadesoftware.musix.ui.screens.PlaylistDetailScreen
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.foundation.lazy.LazyColumn
@@ -513,6 +517,27 @@ object PlayerManager {
                 updatePlaybackDetails()
             }
 
+            // Check if song is downloaded locally to stream offline
+            var downloadedSong: com.arcadesoftware.musix.db.entities.DownloadedSongEntity? = null
+            appContext?.let { ctx ->
+                val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(ctx)
+                downloadedSong = db.musicDao().getDownloadedSong(resolvedSong.id)
+            }
+            if (downloadedSong != null && !downloadedSong!!.localFilePath.isNullOrEmpty()) {
+                val localFile = java.io.File(downloadedSong!!.localFilePath)
+                if (localFile.exists()) {
+                    android.util.Log.d(TAG, "Playing local downloaded file: ${localFile.absolutePath}")
+                    withContext(Dispatchers.Main) {
+                        exoPlayer?.stop()
+                        exoPlayer?.setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(localFile)))
+                        exoPlayer?.prepare()
+                        exoPlayer?.play()
+                        updatePlaybackDetails()
+                    }
+                    return@launch
+                }
+            }
+
             val videoId = resolvedSong.id
             android.util.Log.d(TAG, "Playing videoId=$videoId")
             var streamUrl: String? = null
@@ -915,10 +940,13 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainScreen() {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val context = LocalContext.current
+    val initialTab = remember {
+        if (isNetworkAvailable(context)) 0 else 1
+    }
+    var selectedTab by remember { mutableIntStateOf(initialTab) }
     val mainBackdrop = rememberLayerBackdrop()
     val playlistBackdrop = rememberLayerBackdrop()
-    val context = LocalContext.current
     val currentSong by PlayerManager.currentSong.collectAsState()
     val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
 
@@ -968,7 +996,7 @@ fun MainScreen() {
                 when (selectedTab) {
                     0 -> HomeScreen()
                     1 -> PlaylistScreen()
-                    2 -> Text("Library Fragment")
+                    2 -> DownloadsScreen()
                     3 -> RecommendationsScreen()
                 }
             }
@@ -1788,5 +1816,17 @@ fun QueueRow(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+fun isNetworkAvailable(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork ?: return false
+    val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
+    return when {
+        activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+        activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+        activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> true
+        else -> false
     }
 }
