@@ -304,6 +304,17 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.clickable {
                                 if (downloadedSongs.isNotEmpty()) {
+                                    val downloadsPlaylistItem = PlaylistItem(
+                                        id = "downloads",
+                                        title = "Downloads",
+                                        author = Artist("", null),
+                                        songCountText = "${downloadedSongs.size} songs",
+                                        thumbnail = downloadedSongs.firstOrNull()?.thumbnailUrl ?: "",
+                                        playEndpoint = null,
+                                        shuffleEndpoint = null,
+                                        radioEndpoint = null
+                                    )
+                                    PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
                                     PlayerManager.playQueue(downloadedSongs.map { it.toSongItem() }, 0)
                                 }
                             }
@@ -380,6 +391,17 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
                     isDownloading = isDownloading,
                     downloadProgress = downloadProgress,
                     onClick = {
+                        val downloadsPlaylistItem = PlaylistItem(
+                            id = "downloads",
+                            title = "Downloads",
+                            author = Artist("", null),
+                            songCountText = "${downloadedSongs.size} songs",
+                            thumbnail = downloadedSongs.firstOrNull()?.thumbnailUrl ?: "",
+                            playEndpoint = null,
+                            shuffleEndpoint = null,
+                            radioEndpoint = null
+                        )
+                        PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
                         if (songEntity.localFilePath.isNotEmpty()) {
                             PlayerManager.playLocal(songEntity.toSongItem(), songEntity.localFilePath)
                         } else {
@@ -683,7 +705,20 @@ private fun UserPlaylistDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = { PlayerManager.playQueue(songs.map { it.toSongItem() }, 0) },
+                            onClick = {
+                                val ytPlaylistItem = PlaylistItem(
+                                    id = playlist.id.toString(),
+                                    title = playlist.name,
+                                    author = Artist("", null),
+                                    songCountText = "${songs.size} songs",
+                                    thumbnail = songs.firstOrNull()?.thumbnailUrl ?: "",
+                                    playEndpoint = null,
+                                    shuffleEndpoint = null,
+                                    radioEndpoint = null
+                                )
+                                PlayerManager.currentPlayingPlaylist.value = ytPlaylistItem
+                                PlayerManager.playQueue(songs.map { it.toSongItem() }, 0)
+                            },
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape = RoundedCornerShape(14.dp)
                         ) {
@@ -692,7 +727,20 @@ private fun UserPlaylistDetailScreen(
                             Text("Play All", fontWeight = FontWeight.Bold)
                         }
                         OutlinedButton(
-                            onClick = { PlayerManager.playQueue(songs.shuffled().map { it.toSongItem() }, 0) },
+                            onClick = {
+                                val ytPlaylistItem = PlaylistItem(
+                                    id = playlist.id.toString(),
+                                    title = playlist.name,
+                                    author = Artist("", null),
+                                    songCountText = "${songs.size} songs",
+                                    thumbnail = songs.firstOrNull()?.thumbnailUrl ?: "",
+                                    playEndpoint = null,
+                                    shuffleEndpoint = null,
+                                    radioEndpoint = null
+                                )
+                                PlayerManager.currentPlayingPlaylist.value = ytPlaylistItem
+                                PlayerManager.playQueue(songs.shuffled().map { it.toSongItem() }, 0)
+                            },
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape = RoundedCornerShape(14.dp)
                         ) {
@@ -743,7 +791,20 @@ private fun UserPlaylistDetailScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { PlayerManager.playQueue(songs.map { it.toSongItem() }, index) }
+                            .clickable {
+                                val ytPlaylistItem = PlaylistItem(
+                                    id = playlist.id.toString(),
+                                    title = playlist.name,
+                                    author = Artist("", null),
+                                    songCountText = "${songs.size} songs",
+                                    thumbnail = songs.firstOrNull()?.thumbnailUrl ?: "",
+                                    playEndpoint = null,
+                                    shuffleEndpoint = null,
+                                    radioEndpoint = null
+                                )
+                                PlayerManager.currentPlayingPlaylist.value = ytPlaylistItem
+                                PlayerManager.playQueue(songs.map { it.toSongItem() }, index)
+                            }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
