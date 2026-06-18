@@ -504,16 +504,23 @@ fun SwipeableCardStack(
             // Background card styling for stack depth
             val scale = when (i) {
                 0 -> 1f
-                1 -> 0.95f
-                2 -> 0.90f
-                else -> 0.85f
+                1 -> 0.94f
+                2 -> 0.88f
+                else -> 0.82f
             }
             
             val offsetY = when (i) {
                 0 -> 0.dp
-                1 -> 12.dp
-                2 -> 24.dp
-                else -> 36.dp
+                1 -> (-16).dp
+                2 -> (-32).dp
+                else -> (-48).dp
+            }
+
+            val baseRotation = when (i) {
+                0 -> 0f
+                1 -> 4f
+                2 -> -4f
+                else -> 0f
             }
 
             val cardItem = items[cardIndex]
@@ -578,14 +585,20 @@ fun SwipeableCardStack(
                         )
                     }
             } else {
-                // Background cards scale up and float up relative to swipe progression of the top card
+                // Background cards scale up, float down, and rotate to transition to top card state
                 val swipeProgress = kotlin.math.min(1f, kotlin.math.abs(swipeX.value) / 400f)
-                val targetScale = scale + (0.05f * swipeProgress)
-                val targetOffsetY = offsetY - (12.dp * swipeProgress)
+                val targetScale = scale + (0.06f * swipeProgress)
+                val targetOffsetY = offsetY + (16.dp * swipeProgress)
+                val targetRotation = if (i == 1) {
+                    baseRotation * (1f - swipeProgress)
+                } else {
+                    baseRotation + (8f * swipeProgress) // moves from -4f to +4f
+                }
                 Modifier
                     .graphicsLayer(
                         scaleX = targetScale,
-                        scaleY = targetScale
+                        scaleY = targetScale,
+                        rotationZ = targetRotation
                     )
                     .offset(y = targetOffsetY)
             }
