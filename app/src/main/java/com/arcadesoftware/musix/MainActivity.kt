@@ -330,7 +330,8 @@ object PlayerManager {
      */
     suspend fun downloadAudio(
         song: SongItem,
-        destFile: java.io.File
+        destFile: java.io.File,
+        onProgress: (Float) -> Unit = {}
     ): String? = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val videoId = song.id
         var streamUrl: String? = null
@@ -366,10 +367,22 @@ object PlayerManager {
             connection.setRequestProperty("User-Agent", usedUserAgent)
             connection.setRequestProperty("Referer", "https://www.youtube.com/")
             connection.connect()
+            val contentLength = connection.contentLength.toLong()
             destFile.parentFile?.mkdirs()
+            var bytesCopied = 0L
             connection.inputStream.use { input ->
                 destFile.outputStream().use { output ->
-                    input.copyTo(output, bufferSize = 64 * 1024)
+                    val buffer = ByteArray(64 * 1024)
+                    var bytes = input.read(buffer)
+                    while (bytes >= 0) {
+                        output.write(buffer, 0, bytes)
+                        bytesCopied += bytes
+                        if (contentLength > 0) {
+                            val progressPercent = bytesCopied.toFloat() / contentLength
+                            onProgress(progressPercent)
+                        }
+                        bytes = input.read(buffer)
+                    }
                 }
             }
             connection.disconnect()
@@ -1552,8 +1565,25 @@ fun MiniPlayer(
                     Icon(Icons.Rounded.AddCircleOutline, contentDescription = "Add to Playlist", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
                     var isDownloaded by remember { mutableStateOf(false) }
                     var isDownloading by remember { mutableStateOf(false) }
+                    var downloadProgress by remember { mutableStateOf(0f) }
                     val downloadScope = rememberCoroutineScope()
                     val downloadContext = LocalContext.current
+
+                    LaunchedEffect(currentSong) {
+                        val song = currentSong as? SongItem
+                        if (song != null) {
+                            isDownloading = false
+                            downloadProgress = 0f
+                            val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(downloadContext)
+                            val downloadedSong = withContext(Dispatchers.IO) {
+                                db.musicDao().getDownloadedSong(song.id)
+                            }
+                            isDownloaded = (downloadedSong != null && !downloadedSong.localFilePath.isNullOrEmpty() && java.io.File(downloadedSong.localFilePath).exists())
+                        } else {
+                            isDownloaded = false
+                        }
+                    }
+
                     androidx.compose.animation.AnimatedContent(
                         targetState = when {
                             isDownloaded -> 2
@@ -1563,15 +1593,35 @@ fun MiniPlayer(
                         label = "download"
                     ) { state ->
                         when (state) {
-                            2 -> Icon(Icons.Rounded.DownloadDone, contentDescription = "Downloaded",
+                            2 -> Icon(
+                                imageVector = Icons.Rounded.DownloadDone,
+                                contentDescription = "Downloaded",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp).then(consumeClicksModifier))
-                            1 -> CircularProgressIndicator(
-                                modifier = Modifier.size(28.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
+                                modifier = Modifier.size(28.dp).then(consumeClicksModifier)
                             )
-                            else -> Icon(Icons.Rounded.Download, contentDescription = "Download",
+                            1 -> {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.size(28.dp).then(consumeClicksModifier)
+                                ) {
+                                    CircularProgressIndicator(
+                                        progress = downloadProgress,
+                                        modifier = Modifier.fillMaxSize(),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(RoundedCornerShape(1.5.dp))
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                }
+                            }
+                            else -> Icon(
+                                imageVector = Icons.Rounded.Download,
+                                contentDescription = "Download",
                                 tint = contentColor.copy(0.8f),
                                 modifier = Modifier.size(28.dp).clickable(
                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -1580,11 +1630,14 @@ fun MiniPlayer(
                                     downloadScope.launch(Dispatchers.IO) {
                                         val song = currentSong as? SongItem ?: return@launch
                                         isDownloading = true
+                                        downloadProgress = 0f
                                         val destFile = java.io.File(
                                             downloadContext.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
                                             "${song.id}.m4a"
                                         )
-                                        val localPath = PlayerManager.downloadAudio(song, destFile)
+                                        val localPath = PlayerManager.downloadAudio(song, destFile) { progressVal ->
+                                            downloadProgress = progressVal
+                                        }
                                         val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(downloadContext)
                                         db.musicDao().insertDownloadedSong(
                                             com.arcadesoftware.musix.db.entities.DownloadedSongEntity(
@@ -1599,7 +1652,8 @@ fun MiniPlayer(
                                         isDownloading = false
                                         isDownloaded = (localPath != null)
                                     }
-                                })
+                                }
+                            )
                         }
                     }
                     Icon(Icons.Rounded.Lyrics, contentDescription = "Lyrics", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
