@@ -43,6 +43,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.border
 
 class SearchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,10 +108,10 @@ fun SearchScreen(onBack: () -> Unit) {
         results = emptyList()
     }
 
-    // Outer container — MiniPlayer must be a SIBLING of the layerBackdrop box,
-    // not a child inside it. Same architecture as MainScreen to avoid SIGSEGV.
+    // Outer container — Both MiniPlayer AND Top Bar must be SIBLINGS of the layerBackdrop box,
+    // not children inside it. This architecture avoids circular GPU rendering (SIGSEGV).
     Box(modifier = Modifier.fillMaxSize()) {
-        // Content box: layerBackdrop captures ONLY this layer as the GPU source
+        // Source box: layerBackdrop captures ONLY this layer as the GPU source
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -122,66 +123,9 @@ fun SearchScreen(onBack: () -> Unit) {
                     .fillMaxSize()
                     .padding(bottom = if (currentSong != null) 80.dp else 0.dp)
             ) {
-                // Top Bar with Search Input
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    TextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        placeholder = { Text("Search songs...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Rounded.Search,
-                                contentDescription = "Search Icon",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        trailingIcon = {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = { query = "" }) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Clear",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Search
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onSearch = { searchSongs(query) }
-                        ),
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                        ),
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                }
+                // Spacer for the floating Top Bar (statusBarsPadding + Row height + vertical padding)
+                // height is 56.dp + 12.dp * 2 = 80.dp total area occupied by Top Bar.
+                Spacer(modifier = Modifier.statusBarsPadding().height(80.dp))
 
                 // Results / Suggestions List
                 if (isLoading) {
@@ -198,14 +142,26 @@ fun SearchScreen(onBack: () -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(results) { song ->
-                            SearchSongRow(
-                                song = song,
-                                onClick = { PlayerManager.play(song) }
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.3f))
+                                    .border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(0.05f),
+                                        shape = RoundedCornerShape(16.dp)
+                                    )
+                            ) {
+                                SearchSongRow(
+                                    song = song,
+                                    onClick = { PlayerManager.play(song) }
+                                )
+                            }
                         }
                     }
                 } else if (query.isNotEmpty() && suggestions.isNotEmpty()) {
@@ -213,31 +169,33 @@ fun SearchScreen(onBack: () -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(suggestions) { suggestion ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.2f))
                                     .clickable {
                                         query = suggestion
                                         searchSongs(suggestion)
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(horizontal = 20.dp, vertical = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Search,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(20.dp)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Text(
                                     text = suggestion,
                                     style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onBackground
                                 )
                             }
@@ -258,6 +216,66 @@ fun SearchScreen(onBack: () -> Unit) {
                     }
                 }
             }
+        }
+
+        // Top Bar with Search Input — Overlays on top of the content box
+        // and reads the GPU snapshot of the content box behind it via drawBackdrop().
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .height(56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(28.dp)
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.padding(start = 4.dp)) {
+                Icon(
+                    imageVector = Icons.Rounded.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            TextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                placeholder = { Text("Search songs...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Clear",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Search
+                ),
+                keyboardActions = KeyboardActions(
+                    onSearch = { searchSongs(query) }
+                ),
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                )
+            )
         }
 
         // MiniPlayer is a sibling OUTSIDE the layerBackdrop box — it overlays on top

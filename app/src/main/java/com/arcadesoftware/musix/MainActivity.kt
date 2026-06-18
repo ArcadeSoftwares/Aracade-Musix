@@ -1564,114 +1564,165 @@ fun MiniPlayer(
                             .clip(RoundedCornerShape(24.dp))
                             .background(Color.Gray.copy(if (showLyrics) 0.1f else 0.3f))
                     ) {
-                        if (showLyrics) {
-                            if (isLoadingLyrics) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(color = contentColor)
-                                }
-                            } else if (lyricsLines.isNotEmpty()) {
-                                val currentPosition by PlayerManager.currentPosition.collectAsState()
-                                val activeIndex = remember(lyricsLines, currentPosition) {
-                                    var index = -1
-                                    for (i in lyricsLines.indices) {
-                                        if (currentPosition >= lyricsLines[i].timestamp) {
-                                            index = i
-                                        } else {
-                                            break
-                                        }
-                                    }
-                                    index
-                                }
-                                val listState = rememberLazyListState()
-                                LaunchedEffect(activeIndex) {
-                                    if (activeIndex >= 0) {
-                                        listState.animateScrollToItem(activeIndex)
-                                    }
-                                }
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(vertical = 120.dp, horizontal = 24.dp),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    itemsIndexed(lyricsLines) { index, line ->
-                                        val isActive = index == activeIndex
-                                        val isPast = index < activeIndex
-                                        // Spotify-style: active = white, past/future = grey
-                                        val targetAlpha = when {
-                                            isActive -> 1f
-                                            isPast -> 0.35f
-                                            else -> 0.5f
-                                        }
-                                        val alpha by androidx.compose.animation.core.animateFloatAsState(
-                                            targetValue = targetAlpha,
-                                            animationSpec = androidx.compose.animation.core.tween(300)
-                                        )
-                                        val scale by androidx.compose.animation.core.animateFloatAsState(
-                                            targetValue = if (isActive) 1.08f else 1f,
-                                            animationSpec = androidx.compose.animation.core.spring(
-                                                dampingRatio = 0.6f,
-                                                stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                        // Always show album art underneath
+                        AsyncImage(
+                            model = thumbnail ?: "",
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        // Lyrics overlay slides on top
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = showLyrics,
+                            enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(400)) + androidx.compose.animation.slideInVertically(initialOffsetY = { it / 3 }, animationSpec = androidx.compose.animation.core.tween(400)),
+                            exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) + androidx.compose.animation.slideOutVertically(targetOffsetY = { it / 3 }, animationSpec = androidx.compose.animation.core.tween(300))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Black.copy(alpha = 0.85f),
+                                                Color.Black.copy(alpha = 0.92f)
                                             )
                                         )
-                                        Text(
-                                            text = line.text,
-                                            color = if (isActive) Color.White else Color.White.copy(alpha = alpha),
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                fontSize = if (isActive) 22.sp else 17.sp,
-                                                textAlign = TextAlign.Center,
-                                                lineHeight = 30.sp
-                                            ),
-                                            modifier = Modifier
-                                                .graphicsLayer {
-                                                    scaleX = scale
-                                                    scaleY = scale
-                                                }
-                                                .fillMaxWidth()
-                                                .clickable(
-                                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                                    indication = null
-                                                ) {
-                                                    val duration = PlayerManager.currentDuration.value
-                                                    if (duration > 0) {
-                                                        val progress = line.timestamp.toFloat() / duration
-                                                        PlayerManager.seekTo(progress.coerceIn(0f, 1f))
+                                    )
+                            ) {
+                                when {
+                                    isLoadingLyrics -> {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            io.github.robinpcrd.cupertino.CupertinoActivityIndicator(modifier = Modifier.size(32.dp))
+                                        }
+                                    }
+                                    lyricsLines.isNotEmpty() -> {
+                                        val currentPosition by PlayerManager.currentPosition.collectAsState()
+                                        val activeIndex = remember(lyricsLines, currentPosition) {
+                                            var index = -1
+                                            for (i in lyricsLines.indices) {
+                                                if (currentPosition >= lyricsLines[i].timestamp) index = i
+                                                else break
+                                            }
+                                            index
+                                        }
+                                        val listState = rememberLazyListState()
+                                        LaunchedEffect(activeIndex) {
+                                            if (activeIndex >= 0) {
+                                                listState.animateScrollToItem(
+                                                    index = activeIndex,
+                                                    scrollOffset = -120
+                                                )
+                                            }
+                                        }
+                                        // Top fade gradient
+                                        Box(modifier = Modifier.fillMaxSize()) {
+                                            LazyColumn(
+                                                state = listState,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentPadding = PaddingValues(vertical = 100.dp, horizontal = 20.dp),
+                                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                                horizontalAlignment = Alignment.Start
+                                            ) {
+                                                itemsIndexed(lyricsLines) { index, line ->
+                                                    if (line.text.isBlank()) {
+                                                        Spacer(modifier = Modifier.height(8.dp))
+                                                        return@itemsIndexed
                                                     }
+                                                    val isActive = index == activeIndex
+                                                    val isPast = index < activeIndex
+                                                    val targetAlpha = when {
+                                                        isActive -> 1f
+                                                        isPast -> 0.3f
+                                                        else -> 0.45f
+                                                    }
+                                                    val alpha by androidx.compose.animation.core.animateFloatAsState(
+                                                        targetValue = targetAlpha,
+                                                        animationSpec = androidx.compose.animation.core.tween(300),
+                                                        label = "lyricAlpha"
+                                                    )
+                                                    val scale by androidx.compose.animation.core.animateFloatAsState(
+                                                        targetValue = if (isActive) 1f else 0.95f,
+                                                        animationSpec = androidx.compose.animation.core.spring(
+                                                            dampingRatio = 0.7f,
+                                                            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                                                        ),
+                                                        label = "lyricScale"
+                                                    )
+                                                    Text(
+                                                        text = line.text,
+                                                        color = Color.White.copy(alpha = alpha),
+                                                        style = MaterialTheme.typography.headlineSmall.copy(
+                                                            fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
+                                                            fontSize = if (isActive) 26.sp else 20.sp,
+                                                            lineHeight = 34.sp
+                                                        ),
+                                                        modifier = Modifier
+                                                            .graphicsLayer { scaleX = scale; scaleY = scale; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) }
+                                                            .fillMaxWidth()
+                                                            .clickable(
+                                                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                                                indication = null
+                                                            ) {
+                                                                val duration = PlayerManager.currentDuration.value
+                                                                if (duration > 0) {
+                                                                    val progress = line.timestamp.toFloat() / duration
+                                                                    PlayerManager.seekTo(progress.coerceIn(0f, 1f))
+                                                                }
+                                                            }
+                                                    )
                                                 }
-                                        )
+                                            }
+                                            // Top fade
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(80.dp)
+                                                    .background(
+                                                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                                            colors = listOf(Color.Black.copy(alpha = 0.9f), Color.Transparent)
+                                                        )
+                                                    )
+                                                    .align(Alignment.TopCenter)
+                                            )
+                                            // Bottom fade
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(80.dp)
+                                                    .background(
+                                                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
+                                                        )
+                                                    )
+                                                    .align(Alignment.BottomCenter)
+                                            )
+                                        }
+                                    }
+                                    else -> {
+                                        val scrollState = rememberScrollState()
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .verticalScroll(scrollState)
+                                                .padding(horizontal = 24.dp, vertical = 32.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = lyricsText ?: "No lyrics available.",
+                                                color = Color.White.copy(alpha = 0.8f),
+                                                style = MaterialTheme.typography.bodyLarge.copy(
+                                                    lineHeight = 30.sp,
+                                                    fontSize = 18.sp
+                                                )
+                                            )
+                                        }
                                     }
                                 }
-                            } else {
-                                val scrollState = rememberScrollState()
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .verticalScroll(scrollState)
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = lyricsText ?: "No lyrics available.",
-                                        color = contentColor,
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            lineHeight = 28.sp,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    )
-                                }
                             }
-                        } else {
-                            AsyncImage(
-                                model = thumbnail ?: "",
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
                         }
                     }
 
