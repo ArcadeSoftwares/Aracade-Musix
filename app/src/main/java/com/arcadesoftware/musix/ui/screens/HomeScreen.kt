@@ -361,13 +361,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     }
                 }
                 
-                // Spotify Speed Dial (taking first 6 items from the first section)
-                val speedDialItems = homePage?.sections?.firstOrNull()?.items?.take(6)
-                if (!speedDialItems.isNullOrEmpty()) {
-                    item {
-                        SpeedDialGrid(speedDialItems)
-                    }
-                }
+
 
                 homePage?.sections?.forEachIndexed { index, section ->
                     item {
@@ -757,66 +751,6 @@ fun SquareCard(item: YTItem) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-fun SpeedDialGrid(items: List<YTItem>) {
-    val displayItems = items.take(6)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
-        for (row in displayItems.chunked(2)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (item in row) {
-                    SpeedDialCard(item, modifier = Modifier.weight(1f))
-                }
-                if (row.size == 1) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SpeedDialCard(item: YTItem, modifier: Modifier = Modifier) {
-    val title = when (item) {
-        is SongItem -> item.title
-        is AlbumItem -> item.title
-        is PlaylistItem -> item.title
-        is ArtistItem -> item.title
-        else -> "Unknown"
-    }
-    val thumbnail = when (item) {
-        is SongItem -> item.thumbnail
-        is AlbumItem -> item.thumbnail
-        is PlaylistItem -> item.thumbnail
-        is ArtistItem -> item.thumbnail
-        else -> null
-    }
-
-    Row(
-        modifier = modifier
-            .height(56.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .clickable { PlayerManager.play(item) },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = thumbnail ?: "",
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.size(56.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            maxLines = 2,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.padding(end = 8.dp)
         )
     }
 }
