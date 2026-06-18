@@ -37,6 +37,13 @@ import android.widget.Toast
 import com.arcadesoftware.musix.ui.screens.HomeScreen
 import com.arcadesoftware.musix.ui.screens.PlaylistScreen
 import com.arcadesoftware.musix.ui.screens.RecommendationsScreen
+import androidx.compose.ui.text.font.FontWeight
+import com.arcadesoftware.musix.ui.screens.PlaylistDetailScreen
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.text.style.TextOverflow
 import com.arcadesoftware.musix.updater.MusixUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.music.innertube.models.YTItem
@@ -66,6 +73,8 @@ object PlayerManager {
     val queue = MutableStateFlow<List<YTItem>>(emptyList())
     val currentQueueIndex = MutableStateFlow(0)
     val autoPlayEnabled = MutableStateFlow(true)
+    val activePlaylistDetail = MutableStateFlow<YTItem?>(null)
+    val currentPlayingPlaylist = MutableStateFlow<YTItem?>(null)
     private var appContext: android.content.Context? = null
     private var mediaSession: android.media.session.MediaSession? = null
     private var lastThumbnailUrl: String? = null
@@ -286,6 +295,7 @@ object PlayerManager {
     }
 
     fun play(item: YTItem) {
+        currentPlayingPlaylist.value = null
         queue.value = listOf(item)
         currentQueueIndex.value = 0
         playInternal(item)
@@ -419,6 +429,7 @@ object PlayerManager {
                 is SongItem -> item
                 is PlaylistItem -> {
                     android.util.Log.d(TAG, "Fetching playlist ${item.id} — loading all songs into queue")
+                    currentPlayingPlaylist.value = item
                     val result = YouTube.playlist(item.id)
                     var firstSong: SongItem? = null
                     result.onSuccess { playlistPage ->
@@ -436,6 +447,7 @@ object PlayerManager {
                 }
                 is AlbumItem -> {
                     android.util.Log.d(TAG, "Fetching album ${item.browseId} — loading all songs into queue")
+                    currentPlayingPlaylist.value = item
                     val result = YouTube.album(item.browseId)
                     var firstSong: SongItem? = null
                     result.onSuccess { albumPage ->
@@ -907,6 +919,7 @@ fun MainScreen() {
     val backdrop = rememberLayerBackdrop()
     val context = LocalContext.current
     val currentSong by PlayerManager.currentSong.collectAsState()
+    val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
 
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -928,38 +941,53 @@ fun MainScreen() {
         )
     }
     
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            AppBottomBar(
-                selectedTab = selectedTab,
-                onTabSelected = { 
-                    selectedTab = it
-                },
-                onSearchClick = { 
-                    context.startActivity(android.content.Intent(context, SearchActivity::class.java))
-                },
-                backdrop = backdrop
-            )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .layerBackdrop(backdrop)
-                .background(MaterialTheme.colorScheme.background),
-            contentAlignment = Alignment.Center
-        ) {
-            when (selectedTab) {
-                0 -> HomeScreen()
-                1 -> PlaylistScreen()
-                2 -> Text("Library Fragment")
-                3 -> RecommendationsScreen()
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            bottomBar = {
+                AppBottomBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = { 
+                        selectedTab = it
+                    },
+                    onSearchClick = { 
+                        context.startActivity(android.content.Intent(context, SearchActivity::class.java))
+                    },
+                    backdrop = backdrop
+                )
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .layerBackdrop(backdrop)
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center
+            ) {
+                when (selectedTab) {
+                    0 -> HomeScreen()
+                    1 -> PlaylistScreen()
+                    2 -> Text("Library Fragment")
+                    3 -> RecommendationsScreen()
+                }
             }
         }
-    }
-    
-    Box(modifier = Modifier.fillMaxSize()) {
+
+        // Playlist details page overlay
+        androidx.compose.animation.AnimatedVisibility(
+            visible = activePlaylistDetail != null,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            activePlaylistDetail?.let { playlistItem ->
+                PlaylistDetailScreen(
+                    playlistItem = playlistItem,
+                    onBack = { PlayerManager.activePlaylistDetail.value = null }
+                )
+            }
+        }
+
         androidx.compose.animation.AnimatedVisibility(
             visible = currentSong != null,
             modifier = Modifier.align(Alignment.BottomEnd),
@@ -1014,7 +1042,7 @@ fun AppBottomBar(
             }
             LiquidBottomTab(onClick = { onTabSelected(1) }) {
                 Icon(
-                    Icons.Rounded.QueueMusic, 
+                    Icons.AutoMirrored.Rounded.QueueMusic, 
                     contentDescription = "Playlist", 
                     tint = if (selectedTab == 1) activeColor else inactiveColor,
                     modifier = Modifier.size(24.dp)
@@ -1078,6 +1106,7 @@ fun MiniPlayer(
 ) {
     var expanded by remember { mutableStateOf(false) }
     var isFab by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
     val isLightTheme = !androidx.compose.foundation.isSystemInDarkTheme()
     val isPlaying by PlayerManager.isPlaying.collectAsState()
     val currentAlpha by androidx.compose.animation.core.animateFloatAsState(if (expanded) 0.85f else (if (isLightTheme) 0.5f else 0.4f))
@@ -1290,13 +1319,14 @@ fun MiniPlayer(
             }
         } else {
             // ---- Expanded Full-Screen Player ----
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .systemBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                 // Drag handle at the top
                 Box(
                     modifier = Modifier
@@ -1518,12 +1548,141 @@ fun MiniPlayer(
                         }
                     }
                     Icon(Icons.Rounded.Lyrics, contentDescription = "Lyrics", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
-                    Icon(Icons.Rounded.QueueMusic, contentDescription = "Up Next", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
+                    Icon(
+                        Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = "Up Next",
+                        tint = contentColor.copy(0.8f),
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                showQueue = true
+                            }
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
+
+            // Queue/Playlist Sheet Overlay (Spotify-style)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showQueue,
+                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
+                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                val queueItems by PlayerManager.queue.collectAsState()
+                val currentIndex by PlayerManager.currentQueueIndex.collectAsState()
+                val playingPlaylist by PlayerManager.currentPlayingPlaylist.collectAsState()
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .systemBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, _ -> change.consume() }
+                        }
+                ) {
+                    // Header
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        IconButton(onClick = { showQueue = false }) {
+                            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Close", tint = contentColor)
+                        }
+                        Text(
+                            text = "Playing Queue",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = contentColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (playingPlaylist != null) {
+                            TextButton(onClick = {
+                                PlayerManager.activePlaylistDetail.value = playingPlaylist
+                                showQueue = false
+                                expanded = false
+                            }) {
+                                Text("View Playlist", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Queue List
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        item {
+                            Text(
+                                text = "Now Playing",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = contentColor.copy(0.6f),
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+
+                        currentSong?.let { song ->
+                            item {
+                                QueueRow(
+                                    song = song,
+                                    isCurrent = true,
+                                    contentColor = contentColor,
+                                    onClick = {}
+                                )
+                            }
+                        }
+
+                        item {
+                            Text(
+                                text = "Next In Queue",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = contentColor.copy(0.6f),
+                                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                            )
+                        }
+
+                        val nextItems = if (currentIndex < queueItems.size - 1) {
+                            queueItems.subList(currentIndex + 1, queueItems.size)
+                        } else {
+                            emptyList()
+                        }
+
+                        if (nextItems.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "Queue is empty. Auto-play is enabled.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = contentColor.copy(0.5f),
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                        } else {
+                            itemsIndexed(nextItems) { idx, item ->
+                                val actualIndex = currentIndex + 1 + idx
+                                QueueRow(
+                                    song = item,
+                                    isCurrent = false,
+                                    contentColor = contentColor,
+                                    onClick = {
+                                        PlayerManager.playQueue(queueItems, actualIndex)
+                                    }
+                                )
+                            }
+                    }
+                }
+            }
         }
     }
+}
+}
 }
 
 fun formatDuration(ms: Long): String {
@@ -1532,4 +1691,75 @@ fun formatDuration(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+@Composable
+fun QueueRow(
+    song: YTItem,
+    isCurrent: Boolean,
+    contentColor: Color,
+    onClick: () -> Unit
+) {
+    val title = when (song) {
+        is SongItem -> song.title
+        is AlbumItem -> song.title
+        is PlaylistItem -> song.title
+        else -> ""
+    }
+    val artist = when (song) {
+        is SongItem -> song.artists?.joinToString { it.name } ?: ""
+        is AlbumItem -> song.artists?.joinToString { it.name } ?: ""
+        is PlaylistItem -> song.author?.name ?: ""
+        else -> ""
+    }
+    val thumbnail = song.thumbnail ?: ""
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = !isCurrent, onClick = onClick)
+            .background(if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+        ) {
+            AsyncImage(
+                model = thumbnail,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary else contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = artist,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary.copy(0.7f) else contentColor.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (isCurrent) {
+            Icon(
+                Icons.AutoMirrored.Rounded.VolumeUp,
+                contentDescription = "Playing",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
 }

@@ -655,7 +655,13 @@ fun FeaturedCard(item: YTItem, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
-            .clickable { PlayerManager.play(item) }
+            .clickable {
+                if (item is PlaylistItem || item is AlbumItem) {
+                    PlayerManager.activePlaylistDetail.value = item
+                } else {
+                    PlayerManager.play(item)
+                }
+            }
     ) {
         AsyncImage(
             model = thumbnail ?: "",
@@ -742,7 +748,13 @@ fun SquareCard(item: YTItem) {
     Column(
         modifier = Modifier
             .width(160.dp)
-            .clickable { PlayerManager.play(item) }
+            .clickable {
+                if (item is PlaylistItem || item is AlbumItem) {
+                    PlayerManager.activePlaylistDetail.value = item
+                } else {
+                    PlayerManager.play(item)
+                }
+            }
     ) {
         Box(
             modifier = Modifier
