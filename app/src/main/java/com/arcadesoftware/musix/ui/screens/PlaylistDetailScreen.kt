@@ -106,31 +106,36 @@ fun PlaylistDetailScreen(
         )
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .background(gradientBrush)
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+                    )
                 )
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxSize()
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradientBrush)
-                .padding(paddingValues)
-        ) {
+            },
+            containerColor = Color.Transparent,
+            modifier = Modifier.fillMaxSize()
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CupertinoActivityIndicator(modifier = Modifier.size(48.dp))
@@ -421,4 +426,5 @@ fun PlaylistDetailScreen(
             }
         }
     }
+}
 }

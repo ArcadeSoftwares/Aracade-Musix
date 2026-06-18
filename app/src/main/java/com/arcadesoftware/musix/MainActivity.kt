@@ -1184,8 +1184,16 @@ fun MiniPlayer(
 
     com.arcadesoftware.musix.components.LiquidButton(
         onClick = { 
-            if (isFab) isFab = false 
-            else if (!expanded) expanded = true 
+            if (isFab) {
+                isFab = false 
+            } else if (!expanded) {
+                val playlist = PlayerManager.currentPlayingPlaylist.value
+                if (playlist != null) {
+                    PlayerManager.activePlaylistDetail.value = playlist
+                } else {
+                    expanded = true
+                }
+            }
         },
         backdrop = backdrop,
         surfaceColor = containerColor,
