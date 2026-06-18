@@ -30,8 +30,13 @@ import coil.compose.AsyncImage
 import com.arcadesoftware.musix.PlayerManager
 import com.arcadesoftware.musix.db.AppDatabase
 import com.arcadesoftware.musix.db.entities.DownloadedSongEntity
+import com.arcadesoftware.musix.db.LikedPlaylistsManager
 import com.music.innertube.models.Artist
 import com.music.innertube.models.SongItem
+import com.music.innertube.models.PlaylistItem
+import com.music.innertube.models.AlbumItem
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -48,6 +53,16 @@ class PlaylistViewModel(application: Application) : AndroidViewModel(application
 fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
     val downloadedSongs by viewModel.downloadedSongs.collectAsState()
     var showAll by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    var likedPlaylists by remember { mutableStateOf<List<LikedPlaylistsManager.LikedPlaylist>>(emptyList()) }
+    val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
+
+    LaunchedEffect(activePlaylistDetail) {
+        if (activePlaylistDetail == null) {
+            likedPlaylists = LikedPlaylistsManager.getLikedPlaylists(context)
+        }
+    }
 
     val displayedSongs = if (showAll) downloadedSongs else downloadedSongs.take(5)
     val totalDuration = downloadedSongs.size
@@ -205,6 +220,90 @@ fun PlaylistScreen(viewModel: PlaylistViewModel = viewModel()) {
                     Icon(Icons.Rounded.Shuffle, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Shuffle", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // Favorite Playlists & Albums Section
+        if (likedPlaylists.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp)
+                ) {
+                    Text(
+                        text = "Favorite Playlists & Albums",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(likedPlaylists.size) { index ->
+                            val item = likedPlaylists[index]
+                            Column(
+                                modifier = Modifier
+                                    .width(120.dp)
+                                    .clickable {
+                                        val playlistItem = if (item.type == "ALBUM") {
+                                            AlbumItem(
+                                                browseId = item.id,
+                                                playlistId = "",
+                                                title = item.title,
+                                                artists = listOf(Artist(item.subtitle, null)),
+                                                thumbnail = item.thumbnail ?: ""
+                                            )
+                                        } else {
+                                            PlaylistItem(
+                                                id = item.id,
+                                                title = item.title,
+                                                author = Artist(item.subtitle, null),
+                                                songCountText = null,
+                                                thumbnail = item.thumbnail,
+                                                playEndpoint = null,
+                                                shuffleEndpoint = null,
+                                                radioEndpoint = null
+                                            )
+                                        }
+                                        PlayerManager.activePlaylistDetail.value = playlistItem
+                                    },
+                                horizontalAlignment = Alignment.Start
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(120.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    AsyncImage(
+                                        model = item.thumbnail ?: "",
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = item.title,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = item.subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

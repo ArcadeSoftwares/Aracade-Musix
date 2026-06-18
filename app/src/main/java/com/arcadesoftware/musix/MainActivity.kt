@@ -916,7 +916,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen() {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val backdrop = rememberLayerBackdrop()
+    val mainBackdrop = rememberLayerBackdrop()
+    val playlistBackdrop = rememberLayerBackdrop()
     val context = LocalContext.current
     val currentSong by PlayerManager.currentSong.collectAsState()
     val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
@@ -953,14 +954,14 @@ fun MainScreen() {
                     onSearchClick = { 
                         context.startActivity(android.content.Intent(context, SearchActivity::class.java))
                     },
-                    backdrop = backdrop
+                    backdrop = mainBackdrop
                 )
             }
         ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .layerBackdrop(backdrop)
+                    .layerBackdrop(mainBackdrop)
                     .background(MaterialTheme.colorScheme.background),
                 contentAlignment = Alignment.Center
             ) {
@@ -983,7 +984,7 @@ fun MainScreen() {
             activePlaylistDetail?.let { playlistItem ->
                 PlaylistDetailScreen(
                     playlistItem = playlistItem,
-                    backdrop = backdrop,
+                    backdrop = playlistBackdrop,
                     onBack = { PlayerManager.activePlaylistDetail.value = null }
                 )
             }
@@ -995,8 +996,11 @@ fun MainScreen() {
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
         ) {
-            MiniPlayer(backdrop = backdrop, currentSong = currentSong)
+            val currentBackdrop = if (activePlaylistDetail != null) playlistBackdrop else mainBackdrop
+            MiniPlayer(backdrop = currentBackdrop, currentSong = currentSong)
         }
+
+        com.arcadesoftware.musix.components.FloatingHeartsContainer()
     }
 }
 
@@ -1182,13 +1186,15 @@ fun MiniPlayer(
             }
     }
 
+    val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
+
     com.arcadesoftware.musix.components.LiquidButton(
         onClick = { 
             if (isFab) {
                 isFab = false 
             } else if (!expanded) {
                 val playlist = PlayerManager.currentPlayingPlaylist.value
-                if (playlist != null) {
+                if (playlist != null && activePlaylistDetail == null) {
                     PlayerManager.activePlaylistDetail.value = playlist
                 } else {
                     expanded = true
@@ -1393,13 +1399,25 @@ fun MiniPlayer(
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
+                    val context = LocalContext.current
+                    var isSongLiked by remember(currentSong?.id) {
+                        mutableStateOf(currentSong?.id?.let { com.arcadesoftware.musix.db.LikedSongsManager.isSongLiked(context, it) } ?: false)
+                    }
                     Icon(
-                        Icons.Rounded.FavoriteBorder,
+                        imageVector = if (isSongLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                         contentDescription = "Like",
-                        tint = contentColor,
+                        tint = if (isSongLiked) Color(0xFFFA243C) else contentColor,
                         modifier = Modifier
                             .size(28.dp)
-                            .then(consumeClicksModifier)
+                            .clickable {
+                                currentSong?.id?.let { songId ->
+                                    val nowLiked = com.arcadesoftware.musix.db.LikedSongsManager.toggleLikeSong(context, songId)
+                                    isSongLiked = nowLiked
+                                    if (nowLiked) {
+                                        com.arcadesoftware.musix.components.HeartAnimManager.trigger()
+                                    }
+                                }
+                            }
                     )
                 }
 
