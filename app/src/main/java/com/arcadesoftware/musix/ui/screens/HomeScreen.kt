@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
@@ -346,7 +347,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             }
 
             if (isLoading && homePage?.sections.isNullOrEmpty()) {
-                items(3) {
+                item {
+                    HomeSectionSkeleton(isFeatured = true)
+                }
+                items(2) {
                     HomeSectionSkeleton(isFeatured = false)
                 }
             } else {
@@ -361,9 +365,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
 
                 homePage?.sections?.forEachIndexed { index, section ->
-                    if (index > 0) {
-                        item {
-                            HomeSection(title = section.title) {
+                    item {
+                        HomeSection(title = section.title) {
+                            if (index == 0) {
+                                SwipeableCardStack(items = section.items)
+                            } else {
                                 LazyRow(
                                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                                     contentPadding = PaddingValues(horizontal = 16.dp)
@@ -375,33 +381,31 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                             }
                         }
                     }
-                }
-
-                // Add recommendations smoothly as section rows below home feed sections
-                if (recommendations.isNotEmpty() && selectedChip == null) {
-                    recommendations.forEach { recommendation ->
-                        item {
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = true,
-                                enter = androidx.compose.animation.fadeIn(
-                                    animationSpec = androidx.compose.animation.core.tween(durationMillis = 600)
-                                )
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Because you listened to ${recommendation.seed.title}",
-                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    if (index == 0 && recommendations.isNotEmpty() && selectedChip == null) {
+                        recommendations.forEach { recommendation ->
+                            item {
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = true,
+                                    enter = androidx.compose.animation.fadeIn(
+                                        animationSpec = androidx.compose.animation.core.tween(durationMillis = 600)
                                     )
-                                    LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 16.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                    ) {
-                                        items(recommendation.items) { item ->
-                                            SquareCard(item)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Because you listened to ${recommendation.seed.title}",
+                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                        LazyRow(
+                                            contentPadding = PaddingValues(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                        ) {
+                                            items(recommendation.items) { item ->
+                                                SquareCard(item)
+                                            }
                                         }
                                     }
                                 }
@@ -658,6 +662,24 @@ fun FeaturedCard(item: YTItem, modifier: Modifier = Modifier) {
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+        if (item is PlaylistItem) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.6f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                    contentDescription = "Playlist",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -733,6 +755,24 @@ fun SquareCard(item: YTItem) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
+            if (item is PlaylistItem) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.6f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                        contentDescription = "Playlist",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
