@@ -835,6 +835,7 @@ fun LiquidSlider(
         val isLtr = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
         var didDrag by remember { mutableStateOf(false) }
+        var lastDragValue by remember { mutableStateOf<Float?>(null) }
         val dampedDragAnimation = remember(animationScope) {
             DampedDragAnimation(
                 animationScope = animationScope,
@@ -846,21 +847,24 @@ fun LiquidSlider(
                 onDragStarted = {},
                 onDragStopped = {
                     if (didDrag) {
-                        onValueChange(value())
-                        onValueChangeFinished?.invoke()
+                        lastDragValue?.let { v ->
+                            onValueChange(v)
+                            onValueChangeFinished?.invoke()
+                        }
                         didDrag = false
+                        lastDragValue = null
                     }
                 },
                 onDrag = { _, dragAmount ->
                     if (!didDrag) {
                         didDrag = dragAmount.x != 0f
                     }
-                    val currentValue = value()
                     val delta = (valueRange.endInclusive - valueRange.start) * (dragAmount.x / trackWidth)
-                    onValueChange(
-                        if (isLtr) (currentValue + delta).coerceIn(valueRange)
-                        else (currentValue - delta).coerceIn(valueRange)
-                    )
+                    val newValue =
+                        if (isLtr) (targetValue + delta).coerceIn(valueRange)
+                        else (targetValue - delta).coerceIn(valueRange)
+                    lastDragValue = newValue
+                    onValueChange(newValue)
                 }
             )
         }

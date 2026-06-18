@@ -9,13 +9,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +35,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.arcadesoftware.musix.ui.screens.HomeScreen
+import com.arcadesoftware.musix.ui.screens.PlaylistScreen
 import com.arcadesoftware.musix.updater.MusixUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.music.innertube.models.YTItem
@@ -55,6 +61,9 @@ object PlayerManager {
     val isPlaying = MutableStateFlow(false)
     val currentPosition = MutableStateFlow(0L)
     val currentDuration = MutableStateFlow(0L)
+    val queue = MutableStateFlow<List<YTItem>>(emptyList())
+    val currentQueueIndex = MutableStateFlow(0)
+    val autoPlayEnabled = MutableStateFlow(true)
     private var appContext: android.content.Context? = null
     private var mediaSession: android.media.session.MediaSession? = null
     private var lastThumbnailUrl: String? = null
@@ -146,8 +155,8 @@ object PlayerManager {
                     when (intent.action) {
                         ACTION_PLAY -> exoPlayer?.play()
                         ACTION_PAUSE -> exoPlayer?.pause()
-                        ACTION_PREVIOUS -> exoPlayer?.seekTo(0)
-                        ACTION_NEXT -> {}
+                        ACTION_PREVIOUS -> playPrevious()
+                        ACTION_NEXT -> playNext()
                     }
                 }
             }
@@ -200,7 +209,30 @@ object PlayerManager {
                         androidx.media3.common.Player.STATE_IDLE -> "IDLE"
                         androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
                         androidx.media3.common.Player.STATE_READY -> "READY"
-                        androidx.media3.common.Player.STATE_ENDED -> "ENDED"
+                        androidx.media3.common.Player.STATE_ENDED -> {
+                            val currentIndex = currentQueueIndex.value
+                            val currentQueue = queue.value
+                            if (currentIndex < currentQueue.size - 1) {
+                                currentQueueIndex.value = currentIndex + 1
+                                playInternal(currentQueue[currentIndex + 1])
+                            } else if (autoPlayEnabled.value) {
+                                currentSong.value?.let { song ->
+                                    scope.launch {
+                                        val endpoint = com.music.innertube.models.WatchEndpoint(videoId = song.id)
+                                        YouTube.next(endpoint).onSuccess { nextResult ->
+                                            val nextItems = nextResult.items.filter { it.id != song.id }
+                                            if (nextItems.isNotEmpty()) {
+                                                val newQueue = currentQueue + nextItems
+                                                queue.value = newQueue
+                                                currentQueueIndex.value = currentIndex + 1
+                                                playInternal(newQueue[currentIndex + 1])
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "ENDED"
+                        }
                         else -> "UNKNOWN"
                     }
                     android.util.Log.d(TAG, "ExoPlayer state changed: $stateStr")
@@ -217,6 +249,133 @@ object PlayerManager {
     }
 
     fun play(item: YTItem) {
+        queue.value = listOf(item)
+        currentQueueIndex.value = 0
+        playInternal(item)
+    }
+
+    /** Play a song that is already stored locally on disk (no network needed). */
+    fun playLocal(song: SongItem, localFilePath: String) {
+        queue.value = listOf(song)
+        currentQueueIndex.value = 0
+        scope.launch {
+            withContext(Dispatchers.Main) {
+                currentSong.value = song
+                updatePlaybackDetails()
+            }
+            withContext(Dispatchers.Main) {
+                exoPlayer?.stop()
+                exoPlayer?.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(java.io.File(localFilePath))))
+                exoPlayer?.prepare()
+                exoPlayer?.play()
+                updatePlaybackDetails()
+            }
+        }
+    }
+
+    /**
+     * Resolves the best audio stream URL for [song], downloads it to [destFile],
+     * then saves the local path in the DB and returns the path (or null on failure).
+     */
+    suspend fun downloadAudio(
+        song: SongItem,
+        destFile: java.io.File
+    ): String? = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val videoId = song.id
+        var streamUrl: String? = null
+        var usedUserAgent: String = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
+
+        val signatureTimestamp = com.music.innertube.NewPipeExtractor.getSignatureTimestamp(videoId).getOrNull()
+        for (client in CLIENTS) {
+            val response = YouTube.player(videoId = videoId, client = client, signatureTimestamp = signatureTimestamp)
+            response.onSuccess { playerResponse ->
+                if (playerResponse.playabilityStatus.status != "OK") return@onSuccess
+                val format = playerResponse.streamingData?.adaptiveFormats
+                    ?.filter { it.mimeType.startsWith("audio/") }
+                    ?.maxByOrNull { it.bitrate }
+                    ?: playerResponse.streamingData?.formats?.firstOrNull()
+                if (format != null) {
+                    val url = com.music.innertube.NewPipeExtractor.getStreamUrl(format, videoId)
+                    if (url != null) {
+                        val ua = client.userAgent ?: usedUserAgent
+                        if (validateUrl(url, ua)) {
+                            streamUrl = url
+                            usedUserAgent = ua
+                        }
+                    }
+                }
+            }
+            if (streamUrl != null) break
+        }
+
+        if (streamUrl == null) return@withContext null
+
+        try {
+            val connection = java.net.URL(streamUrl!!).openConnection() as java.net.HttpURLConnection
+            connection.setRequestProperty("User-Agent", usedUserAgent)
+            connection.setRequestProperty("Referer", "https://www.youtube.com/")
+            connection.connect()
+            destFile.parentFile?.mkdirs()
+            connection.inputStream.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output, bufferSize = 64 * 1024)
+                }
+            }
+            connection.disconnect()
+            destFile.absolutePath
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Download failed: ${e.message}", e)
+            null
+        }
+    }
+
+    fun playQueue(items: List<YTItem>, startIndex: Int = 0) {
+        if (items.isEmpty()) return
+        queue.value = items
+        currentQueueIndex.value = startIndex
+        playInternal(items[startIndex])
+    }
+
+    fun playNext() {
+        val currentIndex = currentQueueIndex.value
+        val currentQueue = queue.value
+        if (currentIndex < currentQueue.size - 1) {
+            currentQueueIndex.value = currentIndex + 1
+            playInternal(currentQueue[currentIndex + 1])
+        } else if (autoPlayEnabled.value) {
+            currentSong.value?.let { song ->
+                scope.launch {
+                    val endpoint = com.music.innertube.models.WatchEndpoint(videoId = song.id)
+                    YouTube.next(endpoint).onSuccess { nextResult ->
+                        val nextItems = nextResult.items.filter { it.id != song.id }
+                        if (nextItems.isNotEmpty()) {
+                            val newQueue = currentQueue + nextItems
+                            queue.value = newQueue
+                            currentQueueIndex.value = currentIndex + 1
+                            playInternal(newQueue[currentIndex + 1])
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun playPrevious() {
+        if ((exoPlayer?.currentPosition ?: 0L) > 3000L) {
+            exoPlayer?.seekTo(0)
+        } else {
+            val currentIndex = currentQueueIndex.value
+            val currentQueue = queue.value
+            if (currentIndex > 0) {
+                currentQueueIndex.value = currentIndex - 1
+                playInternal(currentQueue[currentIndex - 1])
+            } else {
+                exoPlayer?.seekTo(0)
+            }
+        }
+    }
+
+    private fun playInternal(item: YTItem) {
         scope.launch {
             android.util.Log.d(TAG, "Resolving item: class=${item::class.java.simpleName}, id=${item.id}")
             val resolvedSong = when (item) {
@@ -266,6 +425,22 @@ object PlayerManager {
             if (resolvedSong == null) {
                 android.util.Log.e(TAG, "Could not resolve a song for item: $item")
                 return@launch
+            }
+
+            // Save to play history
+            appContext?.let { ctx ->
+                scope.launch {
+                    val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(ctx)
+                    db.musicDao().insertPlayHistory(
+                        com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                            id = resolvedSong.id,
+                            title = resolvedSong.title,
+                            artistName = resolvedSong.artists.firstOrNull()?.name ?: "Unknown",
+                            artistId = resolvedSong.artists.firstOrNull()?.id,
+                            thumbnailUrl = resolvedSong.thumbnail
+                        )
+                    )
+                }
             }
 
             withContext(Dispatchers.Main) {
@@ -455,12 +630,13 @@ object PlayerManager {
 
         if (song.thumbnail != lastThumbnailUrl) {
             lastThumbnailUrl = song.thumbnail
+            val highResThumbnail = song.thumbnail.replace(Regex("w\\d+-h\\d+.*"), "w1080-h1080-l90-rj")
             scope.launch {
                 val context = appContext ?: return@launch
                 try {
                     val loader = coil.ImageLoader(context)
                     val request = coil.request.ImageRequest.Builder(context)
-                        .data(song.thumbnail)
+                        .data(highResThumbnail)
                         .allowHardware(false)
                         .build()
                     val result = loader.execute(request)
@@ -663,7 +839,7 @@ fun MainScreen() {
         ) {
             when (selectedTab) {
                 0 -> HomeScreen()
-                1 -> Text("Playlist Fragment")
+                1 -> PlaylistScreen()
                 2 -> Text("Library Fragment")
                 3 -> Text("Podcast Fragment")
             }
@@ -673,7 +849,7 @@ fun MainScreen() {
     Box(modifier = Modifier.fillMaxSize()) {
         androidx.compose.animation.AnimatedVisibility(
             visible = currentSong != null,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomEnd),
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
         ) {
@@ -788,6 +964,7 @@ fun MiniPlayer(
     collapsedBottomPadding: androidx.compose.ui.unit.Dp = 112.dp
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var isFab by remember { mutableStateOf(false) }
     val isLightTheme = !androidx.compose.foundation.isSystemInDarkTheme()
     val isPlaying by PlayerManager.isPlaying.collectAsState()
     val currentAlpha by androidx.compose.animation.core.animateFloatAsState(if (expanded) 0.85f else (if (isLightTheme) 0.5f else 0.4f))
@@ -810,136 +987,436 @@ fun MiniPlayer(
         else -> "Unknown Artist"
     }
     val thumbnail = when (currentSong) {
-        is SongItem -> currentSong.thumbnail
-        is AlbumItem -> currentSong.thumbnail
-        is PlaylistItem -> currentSong.thumbnail
-        is ArtistItem -> currentSong.thumbnail
+        is SongItem -> currentSong.thumbnail.replace(Regex("w\\d+-h\\d+.*"), "w1080-h1080-l90-rj")
+        is AlbumItem -> currentSong.thumbnail.replace(Regex("w\\d+-h\\d+.*"), "w1080-h1080-l90-rj")
+        is PlaylistItem -> currentSong.thumbnail.orEmpty().replace(Regex("w\\d+-h\\d+.*"), "w1080-h1080-l90-rj")
+        is ArtistItem -> currentSong.thumbnail.orEmpty().replace(Regex("w\\d+-h\\d+.*"), "w1080-h1080-l90-rj")
         else -> ""
     }
 
-    val bottomPadding by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else collapsedBottomPadding)
-    val horizontalPadding by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else 45.dp)
-    val cornerRadius by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else 100.dp)
+    val bottomPadding by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else if (isFab) collapsedBottomPadding + 80.dp else collapsedBottomPadding)
+    val horizontalPadding by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else if (isFab) 16.dp else 45.dp)
+    val cornerRadius by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else if (isFab) 32.dp else 100.dp)
     val currentBlur by androidx.compose.animation.core.animateDpAsState(if (expanded) 8.dp else 4.dp)
 
+    // Use fillMaxSize when expanded so the player covers the whole screen
+    val playerModifier = if (expanded) {
+        modifier
+            .fillMaxSize()
+            .pointerInput(expanded, isFab) {
+                detectVerticalDragGestures(
+                    onVerticalDrag = { _, dragAmount ->
+                        if (dragAmount > 10f) expanded = false
+                    }
+                )
+            }
+    } else if (isFab) {
+        modifier
+            .padding(bottom = bottomPadding, end = horizontalPadding)
+            .size(64.dp)
+            .pointerInput(expanded, isFab) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, dragAmount ->
+                        if (dragAmount < -10f) isFab = false
+                    }
+                )
+            }
+    } else {
+        modifier
+            .fillMaxWidth()
+            .padding(bottom = bottomPadding, start = horizontalPadding, end = horizontalPadding)
+            .pointerInput(expanded, isFab) {
+                detectDragGestures(
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        if (kotlin.math.abs(dragAmount.x) > kotlin.math.abs(dragAmount.y)) {
+                            if (dragAmount.x > 10f) isFab = true
+                        } else {
+                            if (dragAmount.y < -10f) expanded = true
+                        }
+                    }
+                )
+            }
+    }
+
     com.arcadesoftware.musix.components.LiquidButton(
-        onClick = { expanded = !expanded },
+        onClick = { 
+            if (isFab) isFab = false 
+            else if (!expanded) expanded = true 
+        },
         backdrop = backdrop,
         surfaceColor = containerColor,
         blurRadius = currentBlur,
         isInteractive = false,
         shape = { RoundedCornerShape(cornerRadius) },
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = bottomPadding, start = horizontalPadding, end = horizontalPadding)
-            .animateContentSize(animationSpec = spring())
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onVerticalDrag = { _, dragAmount ->
-                        if (dragAmount < -10) expanded = true
-                        else if (dragAmount > 10) expanded = false
-                    }
-                )
-            }
+        modifier = playerModifier
     ) {
-        Box(modifier = Modifier.weight(1f)) {
-            val consumeClicksModifier = Modifier.clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                indication = null
-            ) {}
-            if (!expanded) {
+        val consumeClicksModifier = Modifier.clickable(
+            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+            indication = null
+        ) {}
+
+        if (isFab) {
+            Icon(
+                Icons.Rounded.LibraryMusic, 
+                contentDescription = "Player", 
+                tint = contentColor,
+                modifier = Modifier.size(26.dp)
+            )
+            return@LiquidButton
+        }
+
+        if (!expanded) {
+            // ---- Collapsed Mini Player ----
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                val rotation by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                        animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
+                        repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                    )
+                )
+
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    if (isPlaying) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { rotationZ = rotation }
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.sweepGradient(
+                                        listOf(Color.Red, Color.Magenta, Color.Blue, Color.Cyan, Color.Green, Color.Yellow, Color.Red)
+                                    ),
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color.Gray.copy(0.5f))
+                    ) {
+                        AsyncImage(
+                            model = thumbnail ?: "",
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(androidx.compose.ui.graphics.RectangleShape) // Clip marquee
+                ) {
+                    Text(
+                        text = title,
+                        color = contentColor,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                    )
+                    Text(
+                        subtitle,
+                        color = contentColor.copy(0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    Icons.Rounded.SkipPrevious,
+                    contentDescription = "Previous",
+                    tint = contentColor,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) { PlayerManager.playPrevious() }
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    playPauseIcon,
+                    contentDescription = "Play/Pause",
+                    tint = contentColor,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) { PlayerManager.togglePlayPause() }
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    Icons.Rounded.SkipNext,
+                    contentDescription = "Next",
+                    tint = contentColor,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) { PlayerManager.playNext() }
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+        } else {
+            // ---- Expanded Full-Screen Player ----
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Drag handle at the top
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(contentColor.copy(alpha = 0.3f))
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Album art — square, max width but respecting available height
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.Gray.copy(0.3f))
+                ) {
+                    AsyncImage(
+                        model = thumbnail ?: "",
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // Title + like button row
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(modifier = Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color.Gray.copy(0.5f))) {
-                        AsyncImage(model = thumbnail ?: "", contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 16.dp)
+                    ) {
                         Text(
-                            text = title,
+                            title,
                             color = contentColor,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.headlineSmall,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                             maxLines = 1,
-                            modifier = Modifier.basicMarquee()
+                            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                         )
-                        Text(subtitle, color = contentColor.copy(0.7f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            subtitle,
+                            color = contentColor.copy(0.7f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                     }
-                    Icon(Icons.Rounded.SkipPrevious, contentDescription = "Previous", tint = contentColor, modifier = Modifier.size(20.dp).then(consumeClicksModifier))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Icon(playPauseIcon, contentDescription = "Play/Pause", tint = contentColor, modifier = Modifier.size(24.dp).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { PlayerManager.togglePlayPause() })
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Icon(Icons.Rounded.SkipNext, contentDescription = "Next", tint = contentColor, modifier = Modifier.size(20.dp).then(consumeClicksModifier))
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-            } else {
-                val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-                Column(
-                    modifier = Modifier.fillMaxWidth().height(screenHeight).padding(top = 48.dp, start = 24.dp, end = 24.dp, bottom = 48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(16.dp)).background(Color.Gray.copy(0.5f))) {
-                        AsyncImage(model = thumbnail ?: "", contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                    }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                            Text(title, color = contentColor, style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text(subtitle, color = contentColor.copy(0.7f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        }
-                        Icon(Icons.Rounded.FavoriteBorder, contentDescription = "Like", tint = contentColor, modifier = Modifier.size(32.dp).then(consumeClicksModifier))
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    var sliderDragValue by remember { mutableStateOf<Float?>(null) }
-                    val currentPosition by PlayerManager.currentPosition.collectAsState()
-                    val currentDuration by PlayerManager.currentDuration.collectAsState()
-                    val sliderValue = sliderDragValue ?: (if (currentDuration > 0) currentPosition.toFloat() / currentDuration else 0f)
-
-                    val sliderConsumeGesture = Modifier.pointerInput(Unit) {
-                        detectVerticalDragGestures { _, _ -> }
-                    }
-                    com.arcadesoftware.musix.components.LiquidSlider(
-                        value = { sliderValue },
-                        onValueChange = { sliderDragValue = it },
-                        onValueChangeFinished = {
-                            sliderDragValue?.let { PlayerManager.seekTo(it) }
-                            sliderDragValue = null
-                        },
-                        valueRange = 0f..1f,
-                        visibilityThreshold = 0.001f,
-                        backdrop = backdrop,
-                        accentColor = contentColor,
-                        modifier = Modifier.padding(horizontal = 16.dp).then(sliderConsumeGesture)
+                    Icon(
+                        Icons.Rounded.FavoriteBorder,
+                        contentDescription = "Like",
+                        tint = contentColor,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .then(consumeClicksModifier)
                     )
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Rounded.SkipPrevious, contentDescription = "Previous", tint = contentColor, modifier = Modifier.size(48.dp).then(consumeClicksModifier))
-                        Icon(playPauseIcon, contentDescription = "Play/Pause", tint = contentColor, modifier = Modifier.size(72.dp).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { PlayerManager.togglePlayPause() })
-                        Icon(Icons.Rounded.SkipNext, contentDescription = "Next", tint = contentColor, modifier = Modifier.size(48.dp).then(consumeClicksModifier))
-                    }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Rounded.AddCircleOutline, contentDescription = "Add to Playlist", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
-                        Icon(Icons.Rounded.Download, contentDescription = "Download", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
-                        Icon(Icons.Rounded.Lyrics, contentDescription = "Lyrics", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
-                        Icon(Icons.Rounded.QueueMusic, contentDescription = "Up Next", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
-                    }
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Seekbar with time labels
+                val currentPosition by PlayerManager.currentPosition.collectAsState()
+                val currentDuration by PlayerManager.currentDuration.collectAsState()
+                var sliderDragValue by remember { mutableStateOf<Float?>(null) }
+                val sliderValue = sliderDragValue
+                    ?: (if (currentDuration > 0) currentPosition.toFloat() / currentDuration else 0f)
+
+                val sliderConsumeGesture = Modifier.pointerInput(Unit) {
+                    detectVerticalDragGestures { _, _ -> }
+                }
+
+                com.arcadesoftware.musix.components.LiquidSlider(
+                    value = { sliderValue },
+                    onValueChange = { sliderDragValue = it },
+                    onValueChangeFinished = {
+                        sliderDragValue?.let { PlayerManager.seekTo(it) }
+                        sliderDragValue = null
+                    },
+                    valueRange = 0f..1f,
+                    visibilityThreshold = 0.001f,
+                    backdrop = backdrop,
+                    accentColor = contentColor,
+                    modifier = Modifier.fillMaxWidth().then(sliderConsumeGesture)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Time labels
+                val displayPosition = if (sliderDragValue != null && currentDuration > 0)
+                    (sliderDragValue!! * currentDuration).toLong()
+                else currentPosition
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatDuration(displayPosition),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(0.6f)
+                    )
+                    Text(
+                        text = formatDuration(currentDuration),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(0.6f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Playback controls
+                Row(
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.SkipPrevious,
+                        contentDescription = "Previous",
+                        tint = contentColor,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) { PlayerManager.playPrevious() }
+                    )
+                    Icon(
+                        playPauseIcon,
+                        contentDescription = "Play/Pause",
+                        tint = contentColor,
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) { PlayerManager.togglePlayPause() }
+                    )
+                    Icon(
+                        Icons.Rounded.SkipNext,
+                        contentDescription = "Next",
+                        tint = contentColor,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) { PlayerManager.playNext() }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Secondary controls
+                Row(
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.AddCircleOutline, contentDescription = "Add to Playlist", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
+                    var isDownloaded by remember { mutableStateOf(false) }
+                    var isDownloading by remember { mutableStateOf(false) }
+                    val downloadScope = rememberCoroutineScope()
+                    val downloadContext = LocalContext.current
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = when {
+                            isDownloaded -> 2
+                            isDownloading -> 1
+                            else -> 0
+                        },
+                        label = "download"
+                    ) { state ->
+                        when (state) {
+                            2 -> Icon(Icons.Rounded.DownloadDone, contentDescription = "Downloaded",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp).then(consumeClicksModifier))
+                            1 -> CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            else -> Icon(Icons.Rounded.Download, contentDescription = "Download",
+                                tint = contentColor.copy(0.8f),
+                                modifier = Modifier.size(28.dp).clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    downloadScope.launch(Dispatchers.IO) {
+                                        val song = currentSong as? SongItem ?: return@launch
+                                        isDownloading = true
+                                        val destFile = java.io.File(
+                                            downloadContext.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
+                                            "${song.id}.m4a"
+                                        )
+                                        val localPath = PlayerManager.downloadAudio(song, destFile)
+                                        val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(downloadContext)
+                                        db.musicDao().insertDownloadedSong(
+                                            com.arcadesoftware.musix.db.entities.DownloadedSongEntity(
+                                                id = song.id,
+                                                title = song.title,
+                                                artistName = song.artists.firstOrNull()?.name ?: "",
+                                                artistId = song.artists.firstOrNull()?.id,
+                                                thumbnailUrl = song.thumbnail,
+                                                localFilePath = localPath ?: ""
+                                            )
+                                        )
+                                        isDownloading = false
+                                        isDownloaded = (localPath != null)
+                                    }
+                                })
+                        }
+                    }
+                    Icon(Icons.Rounded.Lyrics, contentDescription = "Lyrics", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
+                    Icon(Icons.Rounded.QueueMusic, contentDescription = "Up Next", tint = contentColor.copy(0.8f), modifier = Modifier.size(28.dp).then(consumeClicksModifier))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
+}
+
+fun formatDuration(ms: Long): String {
+    if (ms <= 0L) return "0:00"
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }

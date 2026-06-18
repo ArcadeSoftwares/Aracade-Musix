@@ -32,11 +32,13 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.arcadesoftware.musix.PlayerManager
+import com.arcadesoftware.musix.models.SimilarRecommendation
 import com.music.innertube.YouTube
 import com.music.innertube.models.AlbumItem
 import com.music.innertube.models.ArtistItem
@@ -47,18 +49,31 @@ import com.music.innertube.pages.HomePage
 import io.github.robinpcrd.cupertino.CupertinoActivityIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.arcadesoftware.musix.db.entities.PlayHistoryEntity
 
-class HomeViewModel : ViewModel() {
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _homePage = MutableStateFlow<HomePage?>(null)
     val homePage = _homePage.asStateFlow()
+    
+    val similarRecommendations = MutableStateFlow<List<SimilarRecommendation>>(emptyList())
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
     
     private val _selectedChip = MutableStateFlow<HomePage.Chip?>(null)
     val selectedChip = _selectedChip.asStateFlow()
+
+    // Recently played from DB as a StateFlow
+    val recentlyPlayed = com.arcadesoftware.musix.db.AppDatabase
+        .getDatabase(application)
+        .musicDao()
+        .getRecentPlayHistory(20)
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Lazily, emptyList())
 
     init {
         loadHome()
@@ -67,6 +82,24 @@ class HomeViewModel : ViewModel() {
     private fun loadHome() {
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
+            
+            launch {
+                val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(getApplication())
+                val recentHistory = db.musicDao().getRecentPlayHistory(10).first()
+                val newRecommendations = mutableListOf<SimilarRecommendation>()
+                for (seed in recentHistory.take(5)) {
+                    val endpoint = com.music.innertube.models.WatchEndpoint(videoId = seed.id)
+                    val nextResult = YouTube.next(endpoint).getOrNull()
+                    if (nextResult != null) {
+                        val items = nextResult.items.filter { it.id != seed.id }.shuffled().take(10)
+                        if (items.isNotEmpty()) {
+                            newRecommendations.add(SimilarRecommendation(seed, items))
+                        }
+                    }
+                }
+                similarRecommendations.value = newRecommendations.shuffled()
+            }
+            
             val result = YouTube.home()
             result.onSuccess {
                 _homePage.value = it
@@ -134,6 +167,8 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val homePage by viewModel.homePage.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedChip by viewModel.selectedChip.collectAsState()
+    val recommendations by viewModel.similarRecommendations.collectAsState()
+    val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isLoading,
@@ -155,23 +190,105 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 )
             }
 
-            val currentChips = homePage?.chips?.filter { !it.title.contains("Podcast", ignoreCase = true) }
-            if (!currentChips.isNullOrEmpty()) {
+            if (homePage?.chips != null) {
                 item {
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(currentChips) { chip ->
+                        items(homePage!!.chips!!) { chip ->
                             FilterChip(
-                                selected = chip == selectedChip,
+                                selected = selectedChip == chip,
                                 onClick = { viewModel.toggleChip(chip) },
                                 label = { Text(chip.title) },
-                                shape = RoundedCornerShape(8.dp)
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                )
                             )
                         }
                     }
                 }
+            }
+
+            // Recently Played section (pinned at top)
+            if (recentlyPlayed.isNotEmpty() && selectedChip == null) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Recently Played",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(recentlyPlayed) { entity ->
+                                val songItem = entity.toSongItem()
+                                Column(
+                                    modifier = Modifier
+                                        .width(100.dp)
+                                        .clickable { PlayerManager.play(songItem) }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(100.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                    ) {
+                                        AsyncImage(
+                                            model = entity.thumbnailUrl,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = entity.title,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = entity.artistName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Recommendation rows ("Because you listened to...")
+            if (recommendations.isNotEmpty() && selectedChip == null) {
+                recommendations.forEach { recommendation ->
+                    item {
+                        Column {
+                            Text(
+                                text = "Because you listened to ${recommendation.seed.title}",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(recommendation.items) { item ->
+                                    SquareCard(item)
+                                }
+                            }
+                        }
+                    }
+                }
+
             }
 
             if (isLoading && homePage?.sections.isNullOrEmpty()) {
