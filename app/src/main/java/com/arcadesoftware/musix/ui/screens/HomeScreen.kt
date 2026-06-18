@@ -14,6 +14,8 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.MoreVert
@@ -481,135 +483,226 @@ fun SwipeableCardStack(
     val swipeX = remember { Animatable(0f) }
     val swipeY = remember { Animatable(0f) }
     val isSwipingRight = swipeX.value > 0f
+    var isAnimating by remember { mutableStateOf(false) }
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(380.dp),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Show up to 3 cards in the stack
-        for (i in 2 downTo 0) {
-            val isTopCard = i == 0
-            val cardIndex = if (isTopCard) {
-                activeIndex
-            } else {
-                if (isSwipingRight) {
-                    ((activeIndex - i) % items.size + items.size) % items.size
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(380.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            // Show up to 3 cards in the stack
+            for (i in 2 downTo 0) {
+                val isTopCard = i == 0
+                val cardIndex = if (isTopCard) {
+                    activeIndex
                 } else {
-                    (activeIndex + i) % items.size
+                    if (isSwipingRight) {
+                        ((activeIndex - i) % items.size + items.size) % items.size
+                    } else {
+                        (activeIndex + i) % items.size
+                    }
                 }
-            }
 
-            // Background card styling for stack depth
-            val scale = when (i) {
-                0 -> 1f
-                1 -> 0.94f
-                2 -> 0.88f
-                else -> 0.82f
-            }
-            
-            val offsetY = when (i) {
-                0 -> 0.dp
-                1 -> (-16).dp
-                2 -> (-32).dp
-                else -> (-48).dp
-            }
+                // Background card styling for stack depth
+                val scale = when (i) {
+                    0 -> 1f
+                    1 -> 0.94f
+                    2 -> 0.88f
+                    else -> 0.82f
+                }
+                
+                val offsetY = when (i) {
+                    0 -> 0.dp
+                    1 -> (-16).dp
+                    2 -> (-32).dp
+                    else -> (-48).dp
+                }
 
-            val baseRotation = when (i) {
-                0 -> 0f
-                1 -> 4f
-                2 -> -4f
-                else -> 0f
-            }
+                val baseRotation = when (i) {
+                    0 -> 0f
+                    1 -> 4f
+                    2 -> -4f
+                    else -> 0f
+                }
 
-            val cardItem = items[cardIndex]
+                val cardItem = items[cardIndex]
 
-            // Apply swipe dynamics only to the top card in the stack
-            val dragModifier = if (isTopCard) {
-                Modifier
-                    .offset(
-                        x = (swipeX.value / 3f).dp,
-                        y = (swipeY.value / 3f).dp
-                    )
-                    .graphicsLayer(
-                        rotationZ = swipeX.value / 20f
-                    )
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragEnd = {
-                                coroutineScope.launch {
-                                    val targetX = swipeX.value
-                                    if (kotlin.math.abs(targetX) > 300f) {
-                                        // Swipe card off screen
-                                        val swipeDirection = if (targetX > 0) 1000f else -1000f
-                                        val animJob1 = launch {
-                                            swipeX.animateTo(
-                                                targetValue = swipeDirection,
-                                                animationSpec = tween(durationMillis = 300)
-                                            )
-                                        }
-                                        val animJob2 = launch {
-                                            swipeY.animateTo(
-                                                targetValue = swipeY.value * 2f,
-                                                animationSpec = tween(durationMillis = 300)
-                                            )
-                                        }
-                                        animJob1.join()
-                                        animJob2.join()
-                                        
-                                        // Swipe right (targetX > 0) goes to previous card, swipe left (targetX < 0) goes to next card
-                                        if (targetX > 0) {
-                                            currentIndex--
+                // Apply swipe dynamics only to the top card in the stack
+                val dragModifier = if (isTopCard) {
+                    Modifier
+                        .offset(
+                            x = (swipeX.value / 3f).dp,
+                            y = (swipeY.value / 3f).dp
+                        )
+                        .graphicsLayer(
+                            rotationZ = swipeX.value / 20f
+                        )
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragEnd = {
+                                    if (isAnimating) return@detectDragGestures
+                                    coroutineScope.launch {
+                                        val targetX = swipeX.value
+                                        if (kotlin.math.abs(targetX) > 300f) {
+                                            isAnimating = true
+                                            // Swipe card off screen
+                                            val swipeDirection = if (targetX > 0) 1000f else -1000f
+                                            val animJob1 = launch {
+                                                swipeX.animateTo(
+                                                    targetValue = swipeDirection,
+                                                    animationSpec = tween(durationMillis = 300)
+                                                )
+                                            }
+                                            val animJob2 = launch {
+                                                swipeY.animateTo(
+                                                    targetValue = swipeY.value * 2f,
+                                                    animationSpec = tween(durationMillis = 300)
+                                                )
+                                            }
+                                            animJob1.join()
+                                            animJob2.join()
+                                            
+                                            // Swipe right (targetX > 0) goes to previous card, swipe left (targetX < 0) goes to next card
+                                            if (targetX > 0) {
+                                                currentIndex--
+                                            } else {
+                                                currentIndex++
+                                            }
+                                            swipeX.snapTo(0f)
+                                            swipeY.snapTo(0f)
+                                            isAnimating = false
                                         } else {
-                                            currentIndex++
+                                            // Snap card back to center
+                                            val animJobX = launch { swipeX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) }
+                                            val animJobY = launch { swipeY.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) }
+                                            animJobX.join()
+                                            animJobY.join()
                                         }
-                                        swipeX.snapTo(0f)
-                                        swipeY.snapTo(0f)
-                                    } else {
-                                        // Snap card back to center
-                                        val animJobX = launch { swipeX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) }
-                                        val animJobY = launch { swipeY.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) }
-                                        animJobX.join()
-                                        animJobY.join()
+                                    }
+                                },
+                                onDrag = { change, dragAmount ->
+                                    if (isAnimating) return@detectDragGestures
+                                    change.consume()
+                                    coroutineScope.launch {
+                                        swipeX.snapTo(swipeX.value + dragAmount.x)
+                                        swipeY.snapTo(swipeY.value + dragAmount.y)
                                     }
                                 }
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                coroutineScope.launch {
-                                    swipeX.snapTo(swipeX.value + dragAmount.x)
-                                    swipeY.snapTo(swipeY.value + dragAmount.y)
-                                }
-                            }
-                        )
-                    }
-            } else {
-                // Background cards scale up, float down, and rotate to transition to top card state
-                val swipeProgress = kotlin.math.min(1f, kotlin.math.abs(swipeX.value) / 400f)
-                val targetScale = scale + (0.06f * swipeProgress)
-                val targetOffsetY = offsetY + (16.dp * swipeProgress)
-                val targetRotation = if (i == 1) {
-                    baseRotation * (1f - swipeProgress)
+                            )
+                        }
                 } else {
-                    baseRotation + (8f * swipeProgress) // moves from -4f to +4f
+                    // Background cards scale up, float down, and rotate to transition to top card state
+                    val swipeProgress = kotlin.math.min(1f, kotlin.math.abs(swipeX.value) / 400f)
+                    val targetScale = scale + (0.06f * swipeProgress)
+                    val targetOffsetY = offsetY + (16.dp * swipeProgress)
+                    val targetRotation = if (i == 1) {
+                        baseRotation * (1f - swipeProgress)
+                    } else {
+                        baseRotation + (8f * swipeProgress) // moves from -4f to +4f
+                    }
+                    Modifier
+                        .graphicsLayer(
+                            scaleX = targetScale,
+                            scaleY = targetScale,
+                            rotationZ = targetRotation
+                        )
+                        .offset(y = targetOffsetY)
                 }
-                Modifier
-                    .graphicsLayer(
-                        scaleX = targetScale,
-                        scaleY = targetScale,
-                        rotationZ = targetRotation
-                    )
-                    .offset(y = targetOffsetY)
+
+                FeaturedCard(
+                    item = cardItem,
+                    modifier = Modifier
+                        .then(dragModifier)
+                        .width(300.dp)
+                        .height(340.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Visual controls / indicator below the card stack
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left to Next button
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clickable(enabled = !isAnimating) {
+                        isAnimating = true
+                        coroutineScope.launch {
+                            swipeX.animateTo(
+                                targetValue = -800f,
+                                animationSpec = tween(durationMillis = 300)
+                            )
+                            currentIndex++
+                            swipeX.snapTo(0f)
+                            isAnimating = false
+                        }
+                    }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Swipe Left for Next",
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Left to Next",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
-            FeaturedCard(
-                item = cardItem,
+            // Right to Previous button
+            Row(
                 modifier = Modifier
-                    .then(dragModifier)
-                    .width(300.dp)
-                    .height(340.dp)
-            )
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clickable(enabled = !isAnimating) {
+                        isAnimating = true
+                        coroutineScope.launch {
+                            swipeX.animateTo(
+                                targetValue = 800f,
+                                animationSpec = tween(durationMillis = 300)
+                            )
+                            currentIndex--
+                            swipeX.snapTo(0f)
+                            isAnimating = false
+                        }
+                    }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Right to Previous",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                    contentDescription = "Swipe Right for Previous",
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
