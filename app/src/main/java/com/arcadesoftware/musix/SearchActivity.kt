@@ -32,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.arcadesoftware.musix.ui.theme.MusixTheme
 import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
@@ -58,11 +60,13 @@ class SearchActivity : ComponentActivity() {
 fun SearchScreen(onBack: () -> Unit) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<SongItem>>(emptyList()) }
+    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     val currentSong by PlayerManager.currentSong.collectAsState()
     val isPlaying by PlayerManager.isPlaying.collectAsState()
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    val backdrop = rememberLayerBackdrop()
 
     val searchSongs: (String) -> Unit = { searchQuery ->
         if (searchQuery.isNotBlank()) {
@@ -82,9 +86,29 @@ fun SearchScreen(onBack: () -> Unit) {
         }
     }
 
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) {
+            scope.launch(Dispatchers.IO) {
+                YouTube.searchSuggestions(query).onSuccess { suggestResult ->
+                    withContext(Dispatchers.Main) {
+                        suggestions = suggestResult.queries
+                    }
+                }.onFailure {
+                    withContext(Dispatchers.Main) {
+                        suggestions = emptyList()
+                    }
+                }
+            }
+        } else {
+            suggestions = emptyList()
+        }
+        results = emptyList()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .layerBackdrop(backdrop)
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
@@ -153,7 +177,7 @@ fun SearchScreen(onBack: () -> Unit) {
                 )
             }
 
-            // Results List
+            // Results / Suggestions List
             if (isLoading) {
                 Box(
                     modifier = Modifier
@@ -163,20 +187,7 @@ fun SearchScreen(onBack: () -> Unit) {
                 ) {
                     CupertinoActivityIndicator(modifier = Modifier.padding(16.dp))
                 }
-            } else if (results.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (query.isEmpty()) "Search for songs" else "No results found",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-            } else {
+            } else if (results.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -191,23 +202,71 @@ fun SearchScreen(onBack: () -> Unit) {
                         )
                     }
                 }
+            } else if (query.isNotEmpty() && suggestions.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(suggestions) { suggestion ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    query = suggestion
+                                    searchSongs(suggestion)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = suggestion,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (query.isEmpty()) "Search for songs" else "No results found",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
             }
         }
 
         // Floating Mini Player inside Search Activity
-        AnimatedVisibility(
-            visible = currentSong != null,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(16.dp),
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it })
-        ) {
-            SearchMiniPlayer(
-                currentSong = currentSong,
-                isPlaying = isPlaying,
-                onTogglePlay = { PlayerManager.togglePlayPause() }
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = currentSong != null,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it })
+            ) {
+                MiniPlayer(
+                    backdrop = backdrop,
+                    currentSong = currentSong,
+                    collapsedBottomPadding = 16.dp
+                )
+            }
         }
     }
 }
@@ -268,92 +327,5 @@ fun SearchSongRow(
             tint = Color(0xFFFA243C), // Apple Music Red
             modifier = Modifier.padding(12.dp)
         )
-    }
-}
-
-@Composable
-fun SearchMiniPlayer(
-    currentSong: YTItem?,
-    isPlaying: Boolean,
-    onTogglePlay: () -> Unit
-) {
-    if (currentSong == null) return
-
-    val title = when (currentSong) {
-        is SongItem -> currentSong.title
-        else -> "Unknown Title"
-    }
-    val subtitle = when (currentSong) {
-        is SongItem -> currentSong.artists?.joinToString { it.name } ?: "Unknown Artist"
-        else -> "Unknown Artist"
-    }
-    val thumbnail = when (currentSong) {
-        is SongItem -> currentSong.thumbnail
-        else -> ""
-    }
-
-    val isLightTheme = !androidx.compose.foundation.isSystemInDarkTheme()
-    val containerColor = if (isLightTheme) Color.White else Color(0xFF1C1C1E)
-    val contentColor = if (isLightTheme) Color.Black else Color.White
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Gray.copy(0.3f))
-            ) {
-                AsyncImage(
-                    model = thumbnail,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = contentColor.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            IconButton(onClick = onTogglePlay) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = contentColor,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
     }
 }

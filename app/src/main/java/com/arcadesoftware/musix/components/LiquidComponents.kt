@@ -816,7 +816,8 @@ fun LiquidSlider(
     visibilityThreshold: Float,
     backdrop: com.kyant.backdrop.Backdrop,
     modifier: Modifier = Modifier,
-    accentColor: Color = if (!androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF0088FF) else Color(0xFF0091FF)
+    accentColor: Color = if (!androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF0088FF) else Color(0xFF0091FF),
+    onValueChangeFinished: (() -> Unit)? = null
 ) {
     val isLightTheme = !androidx.compose.foundation.isSystemInDarkTheme()
     val trackColor =
@@ -845,17 +846,20 @@ fun LiquidSlider(
                 onDragStarted = {},
                 onDragStopped = {
                     if (didDrag) {
-                        onValueChange(targetValue)
+                        onValueChange(value())
+                        onValueChangeFinished?.invoke()
+                        didDrag = false
                     }
                 },
                 onDrag = { _, dragAmount ->
                     if (!didDrag) {
                         didDrag = dragAmount.x != 0f
                     }
+                    val currentValue = value()
                     val delta = (valueRange.endInclusive - valueRange.start) * (dragAmount.x / trackWidth)
                     onValueChange(
-                        if (isLtr) (targetValue + delta).coerceIn(valueRange)
-                        else (targetValue - delta).coerceIn(valueRange)
+                        if (isLtr) (currentValue + delta).coerceIn(valueRange)
+                        else (currentValue - delta).coerceIn(valueRange)
                     )
                 }
             )
@@ -884,6 +888,7 @@ fun LiquidSlider(
                                         .coerceIn(valueRange)
                                 dampedDragAnimation.animateToValue(targetValue)
                                 onValueChange(targetValue)
+                                onValueChangeFinished?.invoke()
                             }
                         )
                     }

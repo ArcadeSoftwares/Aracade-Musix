@@ -13,6 +13,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.clickable
@@ -55,6 +56,11 @@ object PlayerManager {
     val currentPosition = MutableStateFlow(0L)
     val currentDuration = MutableStateFlow(0L)
     private var appContext: android.content.Context? = null
+    private var mediaSession: android.media.session.MediaSession? = null
+    private var lastThumbnailUrl: String? = null
+    private var currentMetadataSongId: String? = null
+    private var currentMetadataDuration: Long = 0L
+    private var currentMetadataBitmap: android.graphics.Bitmap? = null
     var exoPlayer: ExoPlayer? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -103,6 +109,30 @@ object PlayerManager {
     fun init(context: android.content.Context) {
         if (exoPlayer == null) {
             appContext = context.applicationContext
+
+            // Initialize platform MediaSession
+            val session = android.media.session.MediaSession(context, "MusixPlayer").apply {
+                isActive = true
+                setCallback(object : android.media.session.MediaSession.Callback() {
+                    override fun onPlay() {
+                        exoPlayer?.play()
+                    }
+                    override fun onPause() {
+                        exoPlayer?.pause()
+                    }
+                    override fun onSkipToNext() {
+                        // Skip to next if playlist is active
+                    }
+                    override fun onSkipToPrevious() {
+                        exoPlayer?.seekTo(0)
+                    }
+                    override fun onSeekTo(pos: Long) {
+                        exoPlayer?.seekTo(pos)
+                        currentPosition.value = pos
+                    }
+                })
+            }
+            mediaSession = session
 
             // Register receiver for notification actions
             val filter = android.content.IntentFilter().apply {
@@ -161,6 +191,7 @@ object PlayerManager {
             exoPlayer?.addListener(object : androidx.media3.common.Player.Listener {
                 override fun onIsPlayingChanged(playing: Boolean) {
                     isPlaying.value = playing
+                    updatePlaybackState()
                     showOrUpdateNotification()
                 }
 
@@ -173,6 +204,7 @@ object PlayerManager {
                         else -> "UNKNOWN"
                     }
                     android.util.Log.d(TAG, "ExoPlayer state changed: $stateStr")
+                    updatePlaybackState()
                     showOrUpdateNotification()
                 }
 
@@ -238,7 +270,7 @@ object PlayerManager {
 
             withContext(Dispatchers.Main) {
                 currentSong.value = resolvedSong
-                showOrUpdateNotification()
+                updatePlaybackDetails()
             }
 
             val videoId = resolvedSong.id
@@ -308,7 +340,7 @@ object PlayerManager {
                     exoPlayer?.setMediaItem(MediaItem.fromUri(streamUrl!!))
                     exoPlayer?.prepare()
                     exoPlayer?.play()
-                    showOrUpdateNotification()
+                    updatePlaybackDetails()
                 }
             } else {
                 android.util.Log.e(TAG, "All clients failed for videoId=$videoId")
@@ -330,6 +362,7 @@ object PlayerManager {
                         if (player.isPlaying || player.playbackState == androidx.media3.common.Player.STATE_READY) {
                             currentPosition.value = player.currentPosition
                             currentDuration.value = player.duration.coerceAtLeast(0L)
+                            updatePlaybackState()
                         }
                     }
                 }
@@ -345,11 +378,119 @@ object PlayerManager {
                 val position = (duration * fraction).toLong()
                 player.seekTo(position)
                 currentPosition.value = position
+                updatePlaybackState()
             }
         }
     }
 
-    private fun showOrUpdateNotification() {
+    private fun updatePlaybackState() {
+        val session = mediaSession ?: return
+        val player = exoPlayer ?: return
+        val song = currentSong.value as? SongItem ?: return
+
+        val state = if (player.isPlaying) {
+            android.media.session.PlaybackState.STATE_PLAYING
+        } else {
+            android.media.session.PlaybackState.STATE_PAUSED
+        }
+
+        // Check if duration has become available or has changed
+        val playerDuration = player.duration
+        val durationMs = if (playerDuration > 0) playerDuration else 0L
+        if (durationMs > 0 && durationMs != currentMetadataDuration && song.id == currentMetadataSongId) {
+            currentMetadataDuration = durationMs
+            val metadataBuilder = android.media.MediaMetadata.Builder()
+                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, song.title)
+                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, song.artists.joinToString { it.name })
+                .putLong(android.media.MediaMetadata.METADATA_KEY_DURATION, durationMs)
+            
+            currentMetadataBitmap?.let { bitmap ->
+                metadataBuilder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, bitmap)
+            }
+            session.setMetadata(metadataBuilder.build())
+        }
+
+        val playbackState = android.media.session.PlaybackState.Builder()
+            .setState(state, player.currentPosition, 1.0f)
+            .setActions(
+                android.media.session.PlaybackState.ACTION_PLAY or
+                android.media.session.PlaybackState.ACTION_PAUSE or
+                android.media.session.PlaybackState.ACTION_SEEK_TO or
+                android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT or
+                android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS
+            )
+            .build()
+
+        session.setPlaybackState(playbackState)
+    }
+
+    private fun updatePlaybackDetails() {
+        val song = currentSong.value as? SongItem ?: return
+
+        val session = mediaSession ?: return
+        val durationMs = exoPlayer?.duration ?: 0L
+        val songDuration = song.duration
+        val targetDuration = if (durationMs > 0) {
+            durationMs
+        } else if (songDuration != null) {
+            songDuration * 1000L
+        } else {
+            0L
+        }
+
+        currentMetadataSongId = song.id
+        currentMetadataDuration = targetDuration
+        currentMetadataBitmap = null // Reset bitmap for new song
+
+        val metadataBuilder = android.media.MediaMetadata.Builder()
+            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, song.title)
+            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, song.artists.joinToString { it.name })
+        if (targetDuration > 0) {
+            metadataBuilder.putLong(android.media.MediaMetadata.METADATA_KEY_DURATION, targetDuration)
+        }
+        session.setMetadata(metadataBuilder.build())
+
+        updatePlaybackState()
+        showOrUpdateNotification()
+
+        if (song.thumbnail != lastThumbnailUrl) {
+            lastThumbnailUrl = song.thumbnail
+            scope.launch {
+                val context = appContext ?: return@launch
+                try {
+                    val loader = coil.ImageLoader(context)
+                    val request = coil.request.ImageRequest.Builder(context)
+                        .data(song.thumbnail)
+                        .allowHardware(false)
+                        .build()
+                    val result = loader.execute(request)
+                    val drawable = result.drawable
+                    if (drawable is android.graphics.drawable.BitmapDrawable) {
+                        val bitmap = drawable.bitmap
+                        withContext(Dispatchers.Main) {
+                            val activeSong = currentSong.value as? SongItem
+                            if (activeSong?.id == song.id) {
+                                currentMetadataBitmap = bitmap
+                                val meta = android.media.MediaMetadata.Builder()
+                                    .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, song.title)
+                                    .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, song.artists.joinToString { it.name })
+                                    .putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, bitmap)
+                                if (currentMetadataDuration > 0) {
+                                    meta.putLong(android.media.MediaMetadata.METADATA_KEY_DURATION, currentMetadataDuration)
+                                }
+                                session.setMetadata(meta.build())
+                                showOrUpdateNotification(bitmap)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "Failed to load notification artwork: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun showOrUpdateNotification(largeIcon: android.graphics.Bitmap? = null) {
         val context = appContext ?: return
         val song = currentSong.value as? SongItem ?: return
         val isPlayingVal = isPlaying.value
@@ -406,6 +547,10 @@ object PlayerManager {
             .setVisibility(android.app.Notification.VISIBILITY_PUBLIC)
             .setOngoing(isPlayingVal)
 
+        if (largeIcon != null) {
+            builder.setLargeIcon(largeIcon)
+        }
+
         builder.addAction(
             android.app.Notification.Action.Builder(
                 android.R.drawable.ic_media_previous, "Previous", prevIntent
@@ -431,10 +576,12 @@ object PlayerManager {
         )
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            builder.setStyle(
-                android.app.Notification.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
+            val style = android.app.Notification.MediaStyle()
+                .setShowActionsInCompactView(0, 1, 2)
+            mediaSession?.let {
+                style.setMediaSession(it.sessionToken)
+            }
+            builder.setStyle(style)
         }
 
         try {
@@ -451,6 +598,7 @@ object PlayerManager {
         }
     }
 }
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -633,7 +781,12 @@ fun AppBottomBar(
 }
 
 @Composable
-fun MiniPlayer(backdrop: com.kyant.backdrop.Backdrop, currentSong: YTItem?, modifier: Modifier = Modifier) {
+fun MiniPlayer(
+    backdrop: com.kyant.backdrop.Backdrop,
+    currentSong: YTItem?,
+    modifier: Modifier = Modifier,
+    collapsedBottomPadding: androidx.compose.ui.unit.Dp = 112.dp
+) {
     var expanded by remember { mutableStateOf(false) }
     val isLightTheme = !androidx.compose.foundation.isSystemInDarkTheme()
     val isPlaying by PlayerManager.isPlaying.collectAsState()
@@ -664,7 +817,7 @@ fun MiniPlayer(backdrop: com.kyant.backdrop.Backdrop, currentSong: YTItem?, modi
         else -> ""
     }
 
-    val bottomPadding by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else 112.dp)
+    val bottomPadding by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else collapsedBottomPadding)
     val horizontalPadding by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else 45.dp)
     val cornerRadius by androidx.compose.animation.core.animateDpAsState(if (expanded) 0.dp else 100.dp)
     val currentBlur by androidx.compose.animation.core.animateDpAsState(if (expanded) 8.dp else 4.dp)
@@ -704,7 +857,14 @@ fun MiniPlayer(backdrop: com.kyant.backdrop.Backdrop, currentSong: YTItem?, modi
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(title, color = contentColor, style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
+                        Text(
+                            text = title,
+                            color = contentColor,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            maxLines = 1,
+                            modifier = Modifier.basicMarquee()
+                        )
                         Text(subtitle, color = contentColor.copy(0.7f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
                     Icon(Icons.Rounded.SkipPrevious, contentDescription = "Previous", tint = contentColor, modifier = Modifier.size(20.dp).then(consumeClicksModifier))
@@ -736,21 +896,26 @@ fun MiniPlayer(backdrop: com.kyant.backdrop.Backdrop, currentSong: YTItem?, modi
                         Icon(Icons.Rounded.FavoriteBorder, contentDescription = "Like", tint = contentColor, modifier = Modifier.size(32.dp).then(consumeClicksModifier))
                     }
                     Spacer(modifier = Modifier.weight(1f))
+                    var sliderDragValue by remember { mutableStateOf<Float?>(null) }
                     val currentPosition by PlayerManager.currentPosition.collectAsState()
                     val currentDuration by PlayerManager.currentDuration.collectAsState()
-                    val sliderValue = if (currentDuration > 0) currentPosition.toFloat() / currentDuration else 0f
+                    val sliderValue = sliderDragValue ?: (if (currentDuration > 0) currentPosition.toFloat() / currentDuration else 0f)
 
                     val sliderConsumeGesture = Modifier.pointerInput(Unit) {
                         detectVerticalDragGestures { _, _ -> }
                     }
                     com.arcadesoftware.musix.components.LiquidSlider(
                         value = { sliderValue },
-                        onValueChange = { PlayerManager.seekTo(it) },
+                        onValueChange = { sliderDragValue = it },
+                        onValueChangeFinished = {
+                            sliderDragValue?.let { PlayerManager.seekTo(it) }
+                            sliderDragValue = null
+                        },
                         valueRange = 0f..1f,
                         visibilityThreshold = 0.001f,
                         backdrop = backdrop,
                         accentColor = contentColor,
-                        modifier = Modifier.padding(horizontal = 16.dp).then(consumeClicksModifier).then(sliderConsumeGesture)
+                        modifier = Modifier.padding(horizontal = 16.dp).then(sliderConsumeGesture)
                     )
                     Spacer(modifier = Modifier.height(32.dp))
                     Row(
