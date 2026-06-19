@@ -100,6 +100,8 @@ object PlayerManager {
     var exoPlayer: ExoPlayer? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val downloadProgressMap = MutableStateFlow<Map<String, Float>>(emptyMap())
+    private var restoredSongId: String? = null
+    private var seekOnPreparePosition: Long? = null
 
     private var simpleCache: androidx.media3.datasource.cache.SimpleCache? = null
 
@@ -189,6 +191,32 @@ object PlayerManager {
         if (exoPlayer == null) {
             appContext = context.applicationContext
 
+            // Restore last played song and progress
+            val prefs = context.getSharedPreferences("musix_playback_state", Context.MODE_PRIVATE)
+            val lastSongId = prefs.getString("last_song_id", null)
+            if (lastSongId != null) {
+                val lastSongTitle = prefs.getString("last_song_title", "Unknown Title") ?: "Unknown Title"
+                val lastSongArtist = prefs.getString("last_song_artist", "Unknown Artist") ?: "Unknown Artist"
+                val lastSongThumbnail = prefs.getString("last_song_thumbnail", "") ?: ""
+                val lastSongDuration = prefs.getLong("last_song_duration", 0L)
+                val lastSongPosition = prefs.getLong("last_song_position", 0L)
+
+                val song = SongItem(
+                    id = lastSongId,
+                    title = lastSongTitle,
+                    artists = listOf(Artist(lastSongArtist, null)),
+                    thumbnail = lastSongThumbnail,
+                    duration = (lastSongDuration / 1000).toInt()
+                )
+                currentSong.value = song
+                currentPosition.value = lastSongPosition
+                currentDuration.value = lastSongDuration
+                restoredSongId = lastSongId
+                if (lastSongPosition > 0L) {
+                    seekOnPreparePosition = lastSongPosition
+                }
+            }
+
             // Initialize platform MediaSession
             val session = android.media.session.MediaSession(context, "MusixPlayer").apply {
                 isActive = true
@@ -264,7 +292,7 @@ object PlayerManager {
             val receiver = object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: Context, intent: android.content.Intent) {
                     when (intent.action) {
-                        ACTION_PLAY -> exoPlayer?.play()
+                        ACTION_PLAY -> playOrRecover(ctx)
                         ACTION_PAUSE -> exoPlayer?.pause()
                         ACTION_PREVIOUS -> playPrevious()
                         ACTION_NEXT -> playNext()
@@ -359,6 +387,10 @@ object PlayerManager {
                             if (state != androidx.media3.common.Player.STATE_ENDED &&
                                 state != androidx.media3.common.Player.STATE_BUFFERING) {
                                 releaseWakeLock()
+                            }
+                            exoPlayer?.let { player ->
+                                currentPosition.value = player.currentPosition
+                                savePlaybackState()
                             }
                         }
                     }
@@ -512,51 +544,69 @@ object PlayerManager {
         }
     }
 
+    private val activeDownloadJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    fun cancelDownload(songId: String) {
+        activeDownloadJobs.remove(songId)?.cancel()
+    }
+
     fun startDownload(song: SongItem, context: Context) {
         val songId = song.id
         synchronized(downloadProgressMap) {
             if (downloadProgressMap.value.containsKey(songId)) return
             downloadProgressMap.value = downloadProgressMap.value + (songId to 0f)
         }
-        scope.launch(Dispatchers.IO) {
-            val destFile = java.io.File(
-                context.applicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
-                "$songId.m4a"
-            )
-            val localPath = downloadAudio(song, destFile) { progressVal ->
+        val destFile = java.io.File(
+            context.applicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
+            "$songId.m4a"
+        )
+        val job = scope.launch(Dispatchers.IO) {
+            try {
+                val localPath = downloadAudio(song, destFile) { progressVal ->
+                    synchronized(downloadProgressMap) {
+                        downloadProgressMap.value = downloadProgressMap.value + (songId to progressVal)
+                    }
+                }
+                if (localPath != null) {
+                    val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(context.applicationContext)
+                    val artistName = song.artists.firstOrNull()?.name ?: ""
+                    val artistId = song.artists.firstOrNull()?.id
+                    db.musicDao().insertDownloadedSong(
+                        com.arcadesoftware.musix.db.entities.DownloadedSongEntity(
+                            id = song.id,
+                            title = song.title,
+                            artistName = artistName,
+                            artistId = artistId,
+                            thumbnailUrl = song.thumbnail,
+                            localFilePath = localPath
+                        )
+                    )
+                    // Also cache in play history so it shows in Recently Played
+                    db.musicDao().insertPlayHistory(
+                        com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                            id = song.id,
+                            title = song.title,
+                            artistName = artistName,
+                            artistId = artistId,
+                            thumbnailUrl = song.thumbnail
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Download job exception: ${e.message}", e)
+            } finally {
+                activeDownloadJobs.remove(songId)
+                val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(context.applicationContext)
+                val isDownloaded = db.musicDao().getDownloadedSong(songId) != null
+                if (!isDownloaded && destFile.exists()) {
+                    destFile.delete()
+                }
                 synchronized(downloadProgressMap) {
-                    downloadProgressMap.value = downloadProgressMap.value + (songId to progressVal)
+                    downloadProgressMap.value = downloadProgressMap.value - songId
                 }
             }
-            if (localPath != null) {
-                val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(context.applicationContext)
-                val artistName = song.artists.firstOrNull()?.name ?: ""
-                val artistId = song.artists.firstOrNull()?.id
-                db.musicDao().insertDownloadedSong(
-                    com.arcadesoftware.musix.db.entities.DownloadedSongEntity(
-                        id = song.id,
-                        title = song.title,
-                        artistName = artistName,
-                        artistId = artistId,
-                        thumbnailUrl = song.thumbnail,
-                        localFilePath = localPath
-                    )
-                )
-                // Also cache in play history so it shows in Recently Played
-                db.musicDao().insertPlayHistory(
-                    com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
-                        id = song.id,
-                        title = song.title,
-                        artistName = artistName,
-                        artistId = artistId,
-                        thumbnailUrl = song.thumbnail
-                    )
-                )
-            }
-            synchronized(downloadProgressMap) {
-                downloadProgressMap.value = downloadProgressMap.value - songId
-            }
         }
+        activeDownloadJobs[songId] = job
     }
 
     fun playQueue(items: List<YTItem>, startIndex: Int = 0) {
@@ -716,6 +766,12 @@ object PlayerManager {
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         exoPlayer?.stop()
                         exoPlayer?.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(localFile)))
+                        val seekPos = if (resolvedSong.id == restoredSongId) seekOnPreparePosition else null
+                        if (seekPos != null && seekPos > 0) {
+                            exoPlayer?.seekTo(seekPos)
+                            restoredSongId = null
+                            seekOnPreparePosition = null
+                        }
                         exoPlayer?.prepare()
                         exoPlayer?.play()
                         updatePlaybackDetails()
@@ -789,6 +845,12 @@ object PlayerManager {
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     exoPlayer?.stop()
                     exoPlayer?.setMediaItem(MediaItem.fromUri(streamUrl!!))
+                    val seekPos = if (resolvedSong.id == restoredSongId) seekOnPreparePosition else null
+                    if (seekPos != null && seekPos > 0) {
+                        exoPlayer?.seekTo(seekPos)
+                        restoredSongId = null
+                        seekOnPreparePosition = null
+                    }
                     exoPlayer?.prepare()
                     exoPlayer?.play()
                     updatePlaybackDetails()
@@ -802,7 +864,56 @@ object PlayerManager {
 
     fun togglePlayPause() {
         exoPlayer?.let { player ->
-            if (player.isPlaying) player.pause() else player.play()
+            if (player.isPlaying) {
+                player.pause()
+            } else {
+                val state = player.playbackState
+                if (state == androidx.media3.common.Player.STATE_IDLE || state == androidx.media3.common.Player.STATE_ENDED) {
+                    currentSong.value?.let { song ->
+                        playInternal(song)
+                    } ?: player.play()
+                } else {
+                    player.play()
+                }
+            }
+        }
+    }
+
+    fun playOrRecover(context: Context? = null) {
+        val ctx = context ?: appContext
+        if (exoPlayer == null && ctx != null) {
+            init(ctx)
+        }
+        exoPlayer?.let { player ->
+            if (!player.isPlaying) {
+                val state = player.playbackState
+                if (state == androidx.media3.common.Player.STATE_IDLE || state == androidx.media3.common.Player.STATE_ENDED) {
+                    currentSong.value?.let { song ->
+                        playInternal(song)
+                    } ?: player.play()
+                } else {
+                    player.play()
+                }
+            }
+        }
+    }
+
+    fun savePlaybackState() {
+        val context = appContext ?: return
+        val song = currentSong.value as? SongItem ?: return
+        val pos = currentPosition.value
+        val dur = currentDuration.value
+        if (song.id.isNotEmpty()) {
+            val prefs = context.getSharedPreferences("musix_playback_state", Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                putString("last_song_id", song.id)
+                putString("last_song_title", song.title)
+                putString("last_song_artist", song.artists.joinToString { it.name })
+                putString("last_song_thumbnail", song.thumbnail)
+                putLong("last_song_duration", dur)
+                putLong("last_song_position", pos)
+                apply()
+            }
         }
     }
 
@@ -817,6 +928,7 @@ object PlayerManager {
                         if (dur > 0) {
                             currentDuration.value = dur
                         }
+                        savePlaybackState()
                     }
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "Error in progress updates", e)
@@ -827,27 +939,41 @@ object PlayerManager {
     }
 
     fun seekTo(fraction: Float) {
-        exoPlayer?.let { player ->
-            val duration = player.duration
-            if (duration > 0) {
-                val position = (duration * fraction).toLong()
-                player.seekTo(position)
-                currentPosition.value = position
-                updatePlaybackState(position)
+        val durationVal = currentDuration.value
+        if (durationVal > 0) {
+            val targetPosition = (durationVal * fraction).toLong()
+            currentPosition.value = targetPosition
+            exoPlayer?.let { player ->
+                if (player.playbackState != androidx.media3.common.Player.STATE_IDLE) {
+                    player.seekTo(targetPosition)
+                } else {
+                    seekOnPreparePosition = targetPosition
+                }
+            } ?: run {
+                seekOnPreparePosition = targetPosition
             }
+            updatePlaybackState(targetPosition)
+            savePlaybackState()
         }
     }
 
     fun seekBy(offsetMs: Long) {
-        exoPlayer?.let { player ->
-            val duration = player.duration
-            if (duration > 0) {
-                val current = player.currentPosition
-                val target = (current + offsetMs).coerceIn(0L, duration)
-                player.seekTo(target)
-                currentPosition.value = target
-                updatePlaybackState(target)
+        val durationVal = currentDuration.value
+        if (durationVal > 0) {
+            val current = currentPosition.value
+            val target = (current + offsetMs).coerceIn(0L, durationVal)
+            currentPosition.value = target
+            exoPlayer?.let { player ->
+                if (player.playbackState != androidx.media3.common.Player.STATE_IDLE) {
+                    player.seekTo(target)
+                } else {
+                    seekOnPreparePosition = target
+                }
+            } ?: run {
+                seekOnPreparePosition = target
             }
+            updatePlaybackState(target)
+            savePlaybackState()
         }
     }
 
@@ -1031,36 +1157,36 @@ object PlayerManager {
             notificationManager.createNotificationChannel(channel)
         }
 
-        val playIntent = android.app.PendingIntent.getBroadcast(
-            context, 0, android.content.Intent(ACTION_PLAY).setPackage(context.packageName),
+        val playIntent = android.app.PendingIntent.getService(
+            context, 0, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_PLAY),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        val pauseIntent = android.app.PendingIntent.getBroadcast(
-            context, 1, android.content.Intent(ACTION_PAUSE).setPackage(context.packageName),
+        val pauseIntent = android.app.PendingIntent.getService(
+            context, 1, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_PAUSE),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        val prevIntent = android.app.PendingIntent.getBroadcast(
-            context, 2, android.content.Intent(ACTION_PREVIOUS).setPackage(context.packageName),
+        val prevIntent = android.app.PendingIntent.getService(
+            context, 2, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_PREVIOUS),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        val nextIntent = android.app.PendingIntent.getBroadcast(
-            context, 3, android.content.Intent(ACTION_NEXT).setPackage(context.packageName),
+        val nextIntent = android.app.PendingIntent.getService(
+            context, 3, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_NEXT),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        val dismissIntent = android.app.PendingIntent.getBroadcast(
-            context, 5, android.content.Intent(ACTION_DISMISS).setPackage(context.packageName),
+        val dismissIntent = android.app.PendingIntent.getService(
+            context, 5, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_DISMISS),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        val likeIntent = android.app.PendingIntent.getBroadcast(
-            context, 6, android.content.Intent(ACTION_LIKE).setPackage(context.packageName),
+        val likeIntent = android.app.PendingIntent.getService(
+            context, 6, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_LIKE),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        val rewindIntent = android.app.PendingIntent.getBroadcast(
-            context, 7, android.content.Intent(ACTION_REWIND_10).setPackage(context.packageName),
+        val rewindIntent = android.app.PendingIntent.getService(
+            context, 7, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_REWIND_10),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
-        val forwardIntent = android.app.PendingIntent.getBroadcast(
-            context, 8, android.content.Intent(ACTION_FORWARD_10).setPackage(context.packageName),
+        val forwardIntent = android.app.PendingIntent.getService(
+            context, 8, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_FORWARD_10),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -1206,6 +1332,8 @@ fun MainScreen() {
     val activeUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
     val showBottomBar = activePlaylistDetail == null && activeUserPlaylist == null
 
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -1238,6 +1366,7 @@ fun MainScreen() {
                     AppBottomBar(
                         selectedTab = selectedTab,
                         onTabSelected = {
+                            focusManager.clearFocus()
                             selectedTab = it
                         },
                         onSearchClick = {
@@ -1272,6 +1401,9 @@ fun MainScreen() {
             modifier = Modifier.fillMaxSize()
         ) {
             activePlaylistDetail?.let { playlistItem ->
+                LaunchedEffect(playlistItem) {
+                    focusManager.clearFocus()
+                }
                 PlaylistDetailScreen(
                     playlistItem = playlistItem,
                     backdrop = playlistBackdrop,
@@ -1404,6 +1536,7 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
     collapsedBottomPadding: androidx.compose.ui.unit.Dp = 112.dp
 ) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var expanded by remember { mutableStateOf(false) }
     var isFab by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
@@ -1523,6 +1656,7 @@ fun MiniPlayer(
                 var isDragValid = false
                 detectVerticalDragGestures(
                     onDragStart = { startPosition ->
+                        focusManager.clearFocus()
                         isDragValid = startPosition.y < size.height * 0.65f
                     },
                     onVerticalDrag = { _, dragAmount ->
@@ -1538,6 +1672,9 @@ fun MiniPlayer(
             .height(64.dp)
             .pointerInput(expanded, isFab) {
                 detectDragGestures(
+                    onDragStart = {
+                        focusManager.clearFocus()
+                    },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         if (kotlin.math.abs(dragAmount.x) > kotlin.math.abs(dragAmount.y)) {
@@ -1558,6 +1695,7 @@ fun MiniPlayer(
 
     com.arcadesoftware.musix.components.LiquidButton(
         onClick = {
+            focusManager.clearFocus()
             if (isFab) {
                 isFab = false
             } else if (!expanded) {
@@ -1671,7 +1809,10 @@ fun MiniPlayer(
                             .clickable(
                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                                 indication = null
-                            ) { PlayerManager.playPrevious() }
+                            ) {
+                                focusManager.clearFocus()
+                                PlayerManager.playPrevious()
+                            }
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Icon(
@@ -1683,7 +1824,10 @@ fun MiniPlayer(
                             .clickable(
                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                                 indication = null
-                            ) { PlayerManager.togglePlayPause() }
+                            ) {
+                                focusManager.clearFocus()
+                                PlayerManager.togglePlayPause()
+                            }
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Icon(
@@ -1695,7 +1839,10 @@ fun MiniPlayer(
                             .clickable(
                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                                 indication = null
-                            ) { PlayerManager.playNext() }
+                            ) {
+                                focusManager.clearFocus()
+                                PlayerManager.playNext()
+                            }
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                 }

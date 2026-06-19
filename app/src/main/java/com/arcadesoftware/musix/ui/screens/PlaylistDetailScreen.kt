@@ -72,6 +72,11 @@ fun PlaylistDetailScreen(
         mutableStateOf(LikedPlaylistsManager.isPlaylistLiked(context, playlistItem.id))
     }
 
+    val downloadProgressMap by PlayerManager.downloadProgressMap.collectAsState()
+    val downloadedSongsState = remember(context) {
+        com.arcadesoftware.musix.db.AppDatabase.getDatabase(context).musicDao().getDownloadedSongs()
+    }.collectAsState(initial = emptyList())
+
     val title = when (playlistItem) {
         is PlaylistItem -> playlistItem.title
         is AlbumItem -> playlistItem.title
@@ -574,7 +579,7 @@ fun PlaylistDetailScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(horizontal = 72.dp),
+                    .padding(start = 72.dp, end = 120.dp),
                 contentAlignment = Alignment.Center
             ) {
                 androidx.compose.animation.AnimatedVisibility(
@@ -603,10 +608,89 @@ fun PlaylistDetailScreen(
                 }
             }
 
-            // Capsule 3: Actions Pill - Heart Like Button directly interactive and circular
-            Box(
-                modifier = Modifier.align(Alignment.CenterEnd)
+            // Capsule 3: Actions Row - Heart & Download Buttons
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Download button
+                if (songs != null && songs!!.isNotEmpty()) {
+                    val downloadedSongs = downloadedSongsState.value
+                    val totalCount = songs!!.size
+                    val downloadedCount = remember(songs, downloadedSongs) {
+                        songs!!.count { song -> downloadedSongs.any { it.id == song.id } }
+                    }
+                    val isAnyDownloading = remember(songs, downloadProgressMap) {
+                        songs!!.any { downloadProgressMap.containsKey(it.id) }
+                    }
+                    val playlistProgress = remember(songs, downloadedSongs, downloadProgressMap) {
+                        if (songs.isNullOrEmpty()) 0f
+                        else {
+                            val sum = songs!!.sumOf { song ->
+                                if (downloadedSongs.any { it.id == song.id }) 1.0
+                                else (downloadProgressMap[song.id] ?: 0f).toDouble()
+                            }
+                            (sum / songs!!.size).toFloat()
+                        }
+                    }
+                    
+                    LiquidButton(
+                        onClick = {
+                            if (isAnyDownloading) {
+                                songs!!.forEach { song ->
+                                    PlayerManager.cancelDownload(song.id)
+                                }
+                            } else if (downloadedCount < totalCount) {
+                                songs!!.forEach { song ->
+                                    val isDownloaded = downloadedSongs.any { it.id == song.id }
+                                    if (!isDownloaded) {
+                                        PlayerManager.startDownload(song, context)
+                                    }
+                                }
+                            }
+                        },
+                        backdrop = backdrop,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        if (isAnyDownloading) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { playlistProgress },
+                                    modifier = Modifier.fillMaxSize(),
+                                    strokeWidth = 2.dp,
+                                    color = appleRed,
+                                    trackColor = appleRed.copy(alpha = 0.15f)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(RoundedCornerShape(1.5.dp))
+                                        .background(appleRed)
+                                )
+                            }
+                        } else if (downloadedCount == totalCount) {
+                            Icon(
+                                imageVector = Icons.Rounded.DownloadDone,
+                                contentDescription = "All songs downloaded",
+                                tint = Color(0xFF22C55E),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Download,
+                                contentDescription = "Download Playlist",
+                                tint = appleRed,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Heart button
                 LiquidButton(
                     onClick = {
                         val pType = if (playlistItem is AlbumItem) "ALBUM" else "PLAYLIST"

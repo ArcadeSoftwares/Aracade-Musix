@@ -3,6 +3,7 @@ package com.arcadesoftware.musix.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -52,6 +54,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import com.arcadesoftware.musix.db.LikedArtistsManager
 
 data class LibraryArtist(
     val id: String?,
@@ -69,39 +74,75 @@ fun LibraryScreen(
     val downloadedSongs by viewModel.downloadedSongs.collectAsState()
     val playHistory by viewModel.playHistory.collectAsState()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     var likedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedArtist by remember { mutableStateOf<LibraryArtist?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var isGridView by remember { mutableStateOf(true) }
 
-    // YT Music search results
+    // YT Music search results & suggestions
     var onlineSearchResult by remember { mutableStateOf<List<ArtistItem>>(emptyList()) }
     var isSearchingOnline by remember { mutableStateOf(false) }
+    var querySuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var artistSuggestions by remember { mutableStateOf<List<ArtistItem>>(emptyList()) }
+    var isSearchFocused by remember { mutableStateOf(false) }
+
+    var likedArtists by remember { mutableStateOf<List<LibraryArtist>>(emptyList()) }
+    var likedArtistsTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(downloadedSongs, playHistory) {
         likedSongIds = withContext(Dispatchers.IO) { LikedSongsManager.getLikedSongIds(context) }
     }
 
+    LaunchedEffect(likedArtistsTrigger, downloadedSongs, playHistory) {
+        likedArtists = withContext(Dispatchers.IO) { LikedArtistsManager.getLikedArtists(context) }
+    }
+
     LaunchedEffect(searchQuery) {
-        if (searchQuery.length >= 2) {
+        if (searchQuery.isNotEmpty()) {
             isSearchingOnline = true
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    YouTube.search(searchQuery, com.music.innertube.YouTube.SearchFilter.FILTER_ARTIST)
-                }
-                result.onSuccess { searchPage ->
-                    onlineSearchResult = searchPage.items.filterIsInstance<ArtistItem>()
+            
+            // Launch suggestions fetch in parallel
+            launch(Dispatchers.IO) {
+                YouTube.searchSuggestions(searchQuery).onSuccess { suggestResult ->
+                    withContext(Dispatchers.Main) {
+                        querySuggestions = suggestResult.queries
+                        artistSuggestions = suggestResult.recommendedItems.filterIsInstance<ArtistItem>()
+                    }
                 }.onFailure {
-                    onlineSearchResult = emptyList()
+                    withContext(Dispatchers.Main) {
+                        querySuggestions = emptyList()
+                        artistSuggestions = emptyList()
+                    }
                 }
-            } catch (e: Exception) {
-                onlineSearchResult = emptyList()
-            } finally {
-                isSearchingOnline = false
+            }
+            
+            // Launch search fetch in parallel
+            launch(Dispatchers.IO) {
+                try {
+                    val result = YouTube.search(searchQuery, com.music.innertube.YouTube.SearchFilter.FILTER_ARTIST)
+                    withContext(Dispatchers.Main) {
+                        result.onSuccess { searchPage ->
+                            onlineSearchResult = searchPage.items.filterIsInstance<ArtistItem>()
+                        }.onFailure {
+                            onlineSearchResult = emptyList()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        onlineSearchResult = emptyList()
+                    }
+                } finally {
+                    withContext(Dispatchers.Main) {
+                        isSearchingOnline = false
+                    }
+                }
             }
         } else {
             onlineSearchResult = emptyList()
+            querySuggestions = emptyList()
+            artistSuggestions = emptyList()
         }
     }
 
@@ -173,35 +214,173 @@ fun LibraryScreen(
                 }
             }
 
-            // Search bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+            // Liquid bar search bar
+            com.arcadesoftware.musix.components.LiquidButton(
+                onClick = {},
+                backdrop = backdrop,
+                surfaceColor = if (!androidx.compose.foundation.isSystemInDarkTheme()) Color.White.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.4f),
+                blurRadius = 4.dp,
+                isInteractive = false,
+                shape = { RoundedCornerShape(28.dp) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                placeholder = { Text("Search library and online artists...") },
-                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Rounded.Clear, contentDescription = "Clear Search")
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .height(56.dp)
+                    .border(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(28.dp)
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(start = 16.dp)
                 )
-            )
+                
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .onFocusChanged { isSearchFocused = it.isFocused },
+                    placeholder = { Text("Search library and online artists...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Clear",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    )
+                )
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (searchQuery.isEmpty() && artistsList.isEmpty()) {
+            if (isSearchFocused && searchQuery.isNotEmpty() && (querySuggestions.isNotEmpty() || artistSuggestions.isNotEmpty())) {
+                // Suggestions overlay
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .background(MaterialTheme.colorScheme.background),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Artist recommendations
+                    if (artistSuggestions.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Artist Suggestions",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                        items(artistSuggestions) { artistItem ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        focusManager.clearFocus()
+                                        val artist = LibraryArtist(
+                                            id = artistItem.id,
+                                            name = artistItem.title,
+                                            thumbnailUrl = artistItem.thumbnail,
+                                            songs = emptyList()
+                                        )
+                                        selectedArtist = artist
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    if (!artistItem.thumbnail.isNullOrEmpty()) {
+                                        AsyncImage(
+                                            model = artistItem.thumbnail,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Rounded.Person,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp).align(Alignment.Center),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = artistItem.title,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Query suggestions
+                    if (querySuggestions.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Queries",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                            )
+                        }
+                        items(querySuggestions) { suggestion ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        searchQuery = suggestion
+                                        focusManager.clearFocus()
+                                    }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = suggestion,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                            }
+                        }
+                    }
+                }
+            } else if (searchQuery.isEmpty() && artistsList.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -227,13 +406,85 @@ fun LibraryScreen(
                 }
             } else {
                 if (isGridView) {
+                    val lazyGridState = rememberLazyGridState()
+                    LaunchedEffect(lazyGridState.isScrollInProgress) {
+                        if (lazyGridState.isScrollInProgress) {
+                            focusManager.clearFocus()
+                        }
+                    }
                     LazyVerticalGrid(
+                        state = lazyGridState,
                         columns = GridCells.Fixed(3),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 140.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.weight(1f)
                     ) {
+                        // Section: Favorite Artists
+                        if (likedArtists.isNotEmpty() && searchQuery.isEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text(
+                                    text = "Favorite Artists",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, start = 4.dp)
+                                )
+                            }
+                            
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(likedArtists) { artist ->
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier
+                                                .width(80.dp)
+                                                .clickable { 
+                                                    focusManager.clearFocus()
+                                                    selectedArtist = artist 
+                                                }
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(70.dp)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            ) {
+                                                if (!artist.thumbnailUrl.isNullOrEmpty()) {
+                                                    AsyncImage(
+                                                        model = artist.thumbnailUrl,
+                                                        contentDescription = null,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        Icons.Rounded.Person,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(36.dp).align(Alignment.Center),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = artist.name,
+                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Section: In Library
                         if (searchQuery.isNotEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -257,7 +508,10 @@ fun LibraryScreen(
                             }
                         } else {
                             items(filteredArtists) { artist ->
-                                LibraryArtistGridItem(artist = artist, onClick = { selectedArtist = artist })
+                                LibraryArtistGridItem(artist = artist, onClick = { 
+                                    focusManager.clearFocus()
+                                    selectedArtist = artist 
+                                })
                             }
                         }
 
@@ -288,7 +542,10 @@ fun LibraryScreen(
                                         thumbnailUrl = artistItem.thumbnail,
                                         songs = emptyList()
                                     )
-                                    LibraryArtistGridItem(artist = artist, onClick = { selectedArtist = artist })
+                                    LibraryArtistGridItem(artist = artist, onClick = { 
+                                        focusManager.clearFocus()
+                                        selectedArtist = artist 
+                                    })
                                 }
                             } else if (!isSearchingOnline) {
                                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -303,11 +560,82 @@ fun LibraryScreen(
                         }
                     }
                 } else {
+                    val lazyListState = rememberLazyListState()
+                    LaunchedEffect(lazyListState.isScrollInProgress) {
+                        if (lazyListState.isScrollInProgress) {
+                            focusManager.clearFocus()
+                        }
+                    }
                     LazyColumn(
+                        state = lazyListState,
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 140.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
+                        // Section: Favorite Artists
+                        if (likedArtists.isNotEmpty() && searchQuery.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "Favorite Artists",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                                )
+                            }
+                            
+                            item {
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(likedArtists) { artist ->
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier
+                                                .width(80.dp)
+                                                .clickable { 
+                                                    focusManager.clearFocus()
+                                                    selectedArtist = artist 
+                                                }
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(70.dp)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            ) {
+                                                if (!artist.thumbnailUrl.isNullOrEmpty()) {
+                                                    AsyncImage(
+                                                        model = artist.thumbnailUrl,
+                                                        contentDescription = null,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        Icons.Rounded.Person,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(36.dp).align(Alignment.Center),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = artist.name,
+                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Section: In Library
                         if (searchQuery.isNotEmpty()) {
                             item {
@@ -331,7 +659,10 @@ fun LibraryScreen(
                             }
                         } else {
                             items(filteredArtists) { artist ->
-                                LibraryArtistListItem(artist = artist, onClick = { selectedArtist = artist })
+                                LibraryArtistListItem(artist = artist, onClick = { 
+                                    focusManager.clearFocus()
+                                    selectedArtist = artist 
+                                })
                             }
                         }
 
@@ -362,7 +693,10 @@ fun LibraryScreen(
                                         thumbnailUrl = artistItem.thumbnail,
                                         songs = emptyList()
                                     )
-                                    LibraryArtistListItem(artist = artist, onClick = { selectedArtist = artist })
+                                    LibraryArtistListItem(artist = artist, onClick = { 
+                                        focusManager.clearFocus()
+                                        selectedArtist = artist 
+                                    })
                                 }
                             } else if (!isSearchingOnline) {
                                 item {
@@ -391,7 +725,8 @@ fun LibraryScreen(
                 ArtistLibraryDetailScreen(
                     artist = artist,
                     backdrop = backdrop,
-                    onBack = { selectedArtist = null }
+                    onBack = { selectedArtist = null },
+                    onLikedArtistsChanged = { likedArtistsTrigger++ }
                 )
             }
         }
@@ -519,8 +854,10 @@ fun LibraryArtistListItem(
 fun ArtistLibraryDetailScreen(
     artist: LibraryArtist,
     backdrop: LayerBackdrop,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onLikedArtistsChanged: () -> Unit
 ) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val appleRed = Color(0xFFFA243C)
     // Automatically switch to Explore Online tab (1) if the library songs list is empty and artist has an online profile ID
     var selectedTab by remember(artist) { mutableStateOf(if (artist.songs.isEmpty() && artist.id != null) 1 else 0) }
@@ -586,6 +923,22 @@ fun ArtistLibraryDetailScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
+                if (artist.id != null) {
+                    val context = LocalContext.current
+                    var isLiked by remember(artist.id) { 
+                        mutableStateOf(LikedArtistsManager.isArtistLiked(context, artist.id)) 
+                    }
+                    IconButton(onClick = {
+                        isLiked = LikedArtistsManager.toggleLikeArtist(context, artist.id, artist.name, artist.thumbnailUrl)
+                        onLikedArtistsChanged()
+                    }) {
+                        Icon(
+                            imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                            contentDescription = "Heart Artist",
+                            tint = if (isLiked) appleRed else MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                }
             }
 
             // Big profile card
@@ -680,6 +1033,7 @@ fun ArtistLibraryDetailScreen(
                             // Play Button
                             Button(
                                 onClick = {
+                                    focusManager.clearFocus()
                                     val playlistItem = PlaylistItem(
                                         id = "artist_lib_${artist.name}",
                                         title = artist.name,
@@ -720,6 +1074,7 @@ fun ArtistLibraryDetailScreen(
                             // Shuffle Button
                             Button(
                                 onClick = {
+                                    focusManager.clearFocus()
                                     val playlistItem = PlaylistItem(
                                         id = "artist_lib_${artist.name}",
                                         title = artist.name,
@@ -767,6 +1122,7 @@ fun ArtistLibraryDetailScreen(
                             isCurrentlyPlaying = isCurrentlyPlaying,
                             appleRed = appleRed,
                             onClick = {
+                                focusManager.clearFocus()
                                 val playlistItem = PlaylistItem(
                                     id = "artist_lib_${artist.name}",
                                     title = artist.name,
@@ -868,6 +1224,7 @@ fun ArtistOnlineDetailView(
     appleRed: Color,
     modifier: Modifier = Modifier
 ) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var artistPage by remember { mutableStateOf<ArtistPage?>(null) }
     var isOnlineLoading by remember { mutableStateOf(true) }
     var onlineError by remember { mutableStateOf<String?>(null) }
@@ -968,6 +1325,7 @@ fun ArtistOnlineDetailView(
                                 // Play Radio
                                 Button(
                                     onClick = {
+                                        focusManager.clearFocus()
                                         PlayerManager.play(page.artist)
                                     },
                                     shape = RoundedCornerShape(12.dp),
@@ -997,6 +1355,7 @@ fun ArtistOnlineDetailView(
                                 // Shuffle
                                 Button(
                                     onClick = {
+                                        focusManager.clearFocus()
                                         val songsSection = page.sections.firstOrNull { 
                                             it.title.contains("songs", ignoreCase = true) || 
                                             it.title.contains("popular", ignoreCase = true) 
@@ -1069,6 +1428,7 @@ fun ArtistOnlineDetailView(
                                             fontWeight = FontWeight.Bold
                                         ),
                                         modifier = Modifier.clickable {
+                                            focusManager.clearFocus()
                                             activeSectionEndpoint = Pair(section.title, section.moreEndpoint!!)
                                         }
                                     )
@@ -1087,6 +1447,7 @@ fun ArtistOnlineDetailView(
                                     isCurrentlyPlaying = isCurrentlyPlaying,
                                     appleRed = appleRed,
                                     onClick = {
+                                        focusManager.clearFocus()
                                         val playlistItem = PlaylistItem(
                                             id = "artist_online_${page.artist.id}",
                                             title = page.artist.title,
@@ -1120,6 +1481,7 @@ fun ArtistOnlineDetailView(
                                                     subtitle = item.year?.toString() ?: "Album",
                                                     thumbnail = item.thumbnail,
                                                     onClick = {
+                                                        focusManager.clearFocus()
                                                         PlayerManager.activePlaylistDetail.value = item
                                                     }
                                                 )
@@ -1130,6 +1492,7 @@ fun ArtistOnlineDetailView(
                                                     subtitle = item.songCountText ?: "Playlist",
                                                     thumbnail = item.thumbnail,
                                                     onClick = {
+                                                        focusManager.clearFocus()
                                                         PlayerManager.activePlaylistDetail.value = item
                                                     }
                                                 )
@@ -1173,6 +1536,7 @@ fun ArtistSectionDetailView(
     appleRed: Color,
     onBack: () -> Unit
 ) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var items by remember { mutableStateOf<List<YTItem>>(emptyList()) }
     var continuationToken by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -1292,6 +1656,7 @@ fun ArtistSectionDetailView(
                                 isCurrentlyPlaying = isCurrentlyPlaying,
                                 appleRed = appleRed,
                                 onClick = {
+                                    focusManager.clearFocus()
                                     val playlistItem = PlaylistItem(
                                         id = "artist_section_${endpoint.browseId}",
                                         title = title,
@@ -1317,6 +1682,7 @@ fun ArtistSectionDetailView(
                                         subtitle = item.year?.toString() ?: "Album",
                                         thumbnail = item.thumbnail,
                                         onClick = {
+                                            focusManager.clearFocus()
                                             PlayerManager.activePlaylistDetail.value = item
                                         }
                                     )
@@ -1327,6 +1693,7 @@ fun ArtistSectionDetailView(
                                         subtitle = item.songCountText ?: "Playlist",
                                         thumbnail = item.thumbnail,
                                         onClick = {
+                                            focusManager.clearFocus()
                                             PlayerManager.activePlaylistDetail.value = item
                                         }
                                     )
@@ -1339,6 +1706,7 @@ fun ArtistSectionDetailView(
                                         isCurrentlyPlaying = isCurrentlyPlaying,
                                         appleRed = appleRed,
                                         onClick = {
+                                            focusManager.clearFocus()
                                             PlayerManager.play(item)
                                         }
                                     )

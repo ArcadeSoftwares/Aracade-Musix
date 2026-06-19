@@ -135,7 +135,7 @@ fun PlaylistScreen(
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
                     Text(
-                        text = "Library",
+                        text = "Playlist",
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 34.sp

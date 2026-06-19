@@ -72,9 +72,41 @@ class PlaybackService : Service() {
 
         startForeground(1001, notification)
 
-        PlayerManager.triggerNotificationUpdate()
+        val action = intent?.action
+        if (action != null) {
+            if (PlayerManager.exoPlayer == null) {
+                PlayerManager.init(applicationContext)
+            }
+            when (action) {
+                "com.arcadesoftware.musix.ACTION_PLAY" -> PlayerManager.playOrRecover(applicationContext)
+                "com.arcadesoftware.musix.ACTION_PAUSE" -> PlayerManager.exoPlayer?.pause()
+                "com.arcadesoftware.musix.ACTION_PREVIOUS" -> PlayerManager.playPrevious()
+                "com.arcadesoftware.musix.ACTION_NEXT" -> PlayerManager.playNext()
+                "com.arcadesoftware.musix.ACTION_DISMISS" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        stopForeground(true)
+                    }
+                    stopSelf()
+                }
+                "com.arcadesoftware.musix.ACTION_LIKE" -> {
+                    val song = PlayerManager.currentSong.value
+                    if (song != null) {
+                        val nowLiked = com.arcadesoftware.musix.db.LikedSongsManager.toggleLikeSong(applicationContext, song.id)
+                        PlayerManager.isCurrentSongLiked.value = nowLiked
+                        PlayerManager.triggerNotificationUpdate()
+                    }
+                }
+                "com.arcadesoftware.musix.ACTION_REWIND_10" -> PlayerManager.seekBy(-10_000L)
+                "com.arcadesoftware.musix.ACTION_FORWARD_10" -> PlayerManager.seekBy(10_000L)
+            }
+        } else {
+            PlayerManager.triggerNotificationUpdate()
+        }
 
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     fun updateForegroundNotification(notification: Notification, isPlaying: Boolean) {
