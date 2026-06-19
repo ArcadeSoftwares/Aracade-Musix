@@ -219,6 +219,32 @@ object PlayerManager {
                             updatePlaybackState(pos)
                         }
                     }
+                    override fun onFastForward() {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            seekBy(10_000L)
+                        }
+                    }
+                    override fun onRewind() {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            seekBy(-10_000L)
+                        }
+                    }
+                    override fun onCustomAction(action: String, extras: android.os.Bundle?) {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            when (action) {
+                                ACTION_LIKE -> {
+                                    val context = appContext ?: return@post
+                                    val song = currentSong.value ?: return@post
+                                    val nowLiked = com.arcadesoftware.musix.db.LikedSongsManager.toggleLikeSong(context, song.id)
+                                    isCurrentSongLiked.value = nowLiked
+                                    updatePlaybackState()
+                                    showOrUpdateNotification()
+                                }
+                                ACTION_REWIND_10 -> seekBy(-10_000L)
+                                ACTION_FORWARD_10 -> seekBy(10_000L)
+                            }
+                        }
+                    }
                 })
             }
             mediaSession = session
@@ -251,6 +277,7 @@ object PlayerManager {
                             val song = currentSong.value ?: return
                             val nowLiked = com.arcadesoftware.musix.db.LikedSongsManager.toggleLikeSong(context, song.id)
                             isCurrentSongLiked.value = nowLiked
+                            updatePlaybackState()
                             showOrUpdateNotification()
                         }
                     }
@@ -857,6 +884,27 @@ object PlayerManager {
 
         val position = overridePosition ?: player.currentPosition
 
+        val likeIconRes = if (isCurrentSongLiked.value) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline
+        val likeTitle = if (isCurrentSongLiked.value) "Unlike" else "Like"
+
+        val likeCustom = android.media.session.PlaybackState.CustomAction.Builder(
+            ACTION_LIKE,
+            likeTitle,
+            likeIconRes
+        ).build()
+
+        val rewindCustom = android.media.session.PlaybackState.CustomAction.Builder(
+            ACTION_REWIND_10,
+            "Rewind 10s",
+            R.drawable.ic_replay_10
+        ).build()
+
+        val forwardCustom = android.media.session.PlaybackState.CustomAction.Builder(
+            ACTION_FORWARD_10,
+            "Forward 10s",
+            R.drawable.ic_forward_10
+        ).build()
+
         val playbackState = android.media.session.PlaybackState.Builder()
             .setState(state, position, 1.0f)
             .setActions(
@@ -868,6 +916,9 @@ object PlayerManager {
                         android.media.session.PlaybackState.ACTION_FAST_FORWARD or
                         android.media.session.PlaybackState.ACTION_REWIND
             )
+            .addCustomAction(likeCustom)
+            .addCustomAction(rewindCustom)
+            .addCustomAction(forwardCustom)
             .build()
 
         session.setPlaybackState(playbackState)
@@ -1086,6 +1137,11 @@ object PlayerManager {
                 R.drawable.ic_replay_10, "Rewind 10s", rewindIntent
             ).build()
         )
+        builder.addAction(
+            android.app.Notification.Action.Builder(
+                R.drawable.ic_forward_10, "Forward 10s", forwardIntent
+            ).build()
+        )
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             val style = android.app.Notification.MediaStyle()
@@ -1116,6 +1172,7 @@ object PlayerManager {
     }
 
     fun triggerNotificationUpdate() {
+        updatePlaybackState()
         showOrUpdateNotification()
     }
 }
