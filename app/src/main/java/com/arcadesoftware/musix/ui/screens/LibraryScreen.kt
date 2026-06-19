@@ -9,12 +9,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,6 +51,7 @@ import io.github.robinpcrd.cupertino.CupertinoActivityIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 
 data class LibraryArtist(
     val id: String?,
@@ -74,8 +75,34 @@ fun LibraryScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isGridView by remember { mutableStateOf(true) }
 
+    // YT Music search results
+    var onlineSearchResult by remember { mutableStateOf<List<ArtistItem>>(emptyList()) }
+    var isSearchingOnline by remember { mutableStateOf(false) }
+
     LaunchedEffect(downloadedSongs, playHistory) {
         likedSongIds = withContext(Dispatchers.IO) { LikedSongsManager.getLikedSongIds(context) }
+    }
+
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.length >= 2) {
+            isSearchingOnline = true
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    YouTube.search(searchQuery, com.music.innertube.YouTube.SearchFilter.FILTER_ARTIST)
+                }
+                result.onSuccess { searchPage ->
+                    onlineSearchResult = searchPage.items.filterIsInstance<ArtistItem>()
+                }.onFailure {
+                    onlineSearchResult = emptyList()
+                }
+            } catch (e: Exception) {
+                onlineSearchResult = emptyList()
+            } finally {
+                isSearchingOnline = false
+            }
+        } else {
+            onlineSearchResult = emptyList()
+        }
     }
 
     val artistsList = remember(downloadedSongs, playHistory, likedSongIds) {
@@ -139,7 +166,7 @@ fun LibraryScreen(
                 // Grid/List toggle
                 IconButton(onClick = { isGridView = !isGridView }) {
                     Icon(
-                        imageVector = if (isGridView) Icons.Rounded.List else Icons.Rounded.GridView,
+                        imageVector = if (isGridView) Icons.Rounded.GridView else Icons.Rounded.GridView,
                         contentDescription = "Toggle View Mode",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
@@ -153,7 +180,7 @@ fun LibraryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 8.dp),
-                placeholder = { Text("Search library artists...") },
+                placeholder = { Text("Search library and online artists...") },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -174,7 +201,7 @@ fun LibraryScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (filteredArtists.isEmpty()) {
+            if (searchQuery.isEmpty() && artistsList.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -192,7 +219,7 @@ fun LibraryScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                         )
                         Text(
-                            text = if (searchQuery.isEmpty()) "No artists found in library" else "No matching artists",
+                            text = "No artists found in library",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
@@ -207,18 +234,146 @@ fun LibraryScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        items(filteredArtists) { artist ->
-                            LibraryArtistGridItem(artist = artist, onClick = { selectedArtist = artist })
+                        // Section: In Library
+                        if (searchQuery.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text(
+                                    text = "In Library",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp, start = 4.dp)
+                                )
+                            }
+                        }
+
+                        if (filteredArtists.isEmpty() && searchQuery.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text(
+                                    text = "No local matching artists",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
+                                )
+                            }
+                        } else {
+                            items(filteredArtists) { artist ->
+                                LibraryArtistGridItem(artist = artist, onClick = { selectedArtist = artist })
+                            }
+                        }
+
+                        // Section: YouTube Music Online Results
+                        if (searchQuery.isNotEmpty() && (isSearchingOnline || onlineSearchResult.isNotEmpty())) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp, start = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "From YouTube Music",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    if (isSearchingOnline) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        CupertinoActivityIndicator(modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+
+                            if (onlineSearchResult.isNotEmpty()) {
+                                items(onlineSearchResult) { artistItem ->
+                                    val artist = LibraryArtist(
+                                        id = artistItem.id,
+                                        name = artistItem.title,
+                                        thumbnailUrl = artistItem.thumbnail,
+                                        songs = emptyList()
+                                    )
+                                    LibraryArtistGridItem(artist = artist, onClick = { selectedArtist = artist })
+                                }
+                            } else if (!isSearchingOnline) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    Text(
+                                        text = "No artists found on YouTube Music",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 140.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        items(filteredArtists) { artist ->
-                            LibraryArtistListItem(artist = artist, onClick = { selectedArtist = artist })
+                        // Section: In Library
+                        if (searchQuery.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "In Library",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                )
+                            }
+                        }
+
+                        if (filteredArtists.isEmpty() && searchQuery.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "No local matching artists",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(vertical = 12.dp)
+                                )
+                            }
+                        } else {
+                            items(filteredArtists) { artist ->
+                                LibraryArtistListItem(artist = artist, onClick = { selectedArtist = artist })
+                            }
+                        }
+
+                        // Section: YouTube Music Online Results
+                        if (searchQuery.isNotEmpty() && (isSearchingOnline || onlineSearchResult.isNotEmpty())) {
+                            item {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "From YouTube Music",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    if (isSearchingOnline) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        CupertinoActivityIndicator(modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+
+                            if (onlineSearchResult.isNotEmpty()) {
+                                items(onlineSearchResult) { artistItem ->
+                                    val artist = LibraryArtist(
+                                        id = artistItem.id,
+                                        name = artistItem.title,
+                                        thumbnailUrl = artistItem.thumbnail,
+                                        songs = emptyList()
+                                    )
+                                    LibraryArtistListItem(artist = artist, onClick = { selectedArtist = artist })
+                                }
+                            } else if (!isSearchingOnline) {
+                                item {
+                                    Text(
+                                        text = "No artists found on YouTube Music",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.padding(vertical = 12.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -290,7 +445,7 @@ fun LibraryArtistGridItem(
             modifier = Modifier.fillMaxWidth()
         )
         Text(
-            text = "${artist.songs.size} " + if (artist.songs.size == 1) "track" else "tracks",
+            text = if (artist.songs.isEmpty()) "Online profile" else ("${artist.songs.size} " + if (artist.songs.size == 1) "track" else "tracks"),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
@@ -345,7 +500,7 @@ fun LibraryArtistListItem(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "${artist.songs.size} " + if (artist.songs.size == 1) "song in library" else "songs in library",
+                text = if (artist.songs.isEmpty()) "Explore Online" else ("${artist.songs.size} " + if (artist.songs.size == 1) "song in library" else "songs in library"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
@@ -367,7 +522,8 @@ fun ArtistLibraryDetailScreen(
     onBack: () -> Unit
 ) {
     val appleRed = Color(0xFFFA243C)
-    var selectedTab by remember { mutableStateOf(0) } // 0 = In Library, 1 = Explore Online
+    // Automatically switch to Explore Online tab (1) if the library songs list is empty and artist has an online profile ID
+    var selectedTab by remember(artist) { mutableStateOf(if (artist.songs.isEmpty() && artist.id != null) 1 else 0) }
     val hasOnlineProfile = artist.id != null
 
     Box(
@@ -471,14 +627,14 @@ fun ArtistLibraryDetailScreen(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "${artist.songs.size} library songs",
+                    text = if (artist.songs.isEmpty()) "Online YT Music Profile" else "${artist.songs.size} library songs",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
 
             // Tabs for Library vs Online (if available)
-            if (hasOnlineProfile) {
+            if (hasOnlineProfile && artist.songs.isNotEmpty()) {
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
@@ -507,7 +663,7 @@ fun ArtistLibraryDetailScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Tab contents
-            if (selectedTab == 0 || !hasOnlineProfile) {
+            if (selectedTab == 0 && artist.songs.isNotEmpty()) {
                 // In Library Screen
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 150.dp),
@@ -627,7 +783,7 @@ fun ArtistLibraryDetailScreen(
                         )
                     }
                 }
-            } else {
+            } else if (hasOnlineProfile) {
                 // Explore Online Screen
                 ArtistOnlineDetailView(artistId = artist.id!!, appleRed = appleRed, modifier = Modifier.weight(1f))
             }
@@ -715,6 +871,7 @@ fun ArtistOnlineDetailView(
     var artistPage by remember { mutableStateOf<ArtistPage?>(null) }
     var isOnlineLoading by remember { mutableStateOf(true) }
     var onlineError by remember { mutableStateOf<String?>(null) }
+    var activeSectionEndpoint by remember { mutableStateOf<Pair<String, BrowseEndpoint>?>(null) }
 
     LaunchedEffect(artistId) {
         isOnlineLoading = true
@@ -767,7 +924,7 @@ fun ArtistOnlineDetailView(
                     contentPadding = PaddingValues(bottom = 150.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // subscriber info / monthly listeners
+                    // subscriber info / monthly listeners & Play Radio Buttons
                     item {
                         Column(
                             modifier = Modifier
@@ -800,18 +957,123 @@ fun ArtistOnlineDetailView(
                                         .padding(vertical = 4.dp)
                                 )
                             }
+
+                            // Online Play/Shuffle Buttons
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Play Radio
+                                Button(
+                                    onClick = {
+                                        PlayerManager.play(page.artist)
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.PlayArrow,
+                                            contentDescription = null,
+                                            tint = appleRed,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Play Radio",
+                                            color = appleRed,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        )
+                                    }
+                                }
+
+                                // Shuffle
+                                Button(
+                                    onClick = {
+                                        val songsSection = page.sections.firstOrNull { 
+                                            it.title.contains("songs", ignoreCase = true) || 
+                                            it.title.contains("popular", ignoreCase = true) 
+                                        }
+                                        val songs = songsSection?.items?.filterIsInstance<SongItem>().orEmpty()
+                                        if (songs.isNotEmpty()) {
+                                            val playlistItem = PlaylistItem(
+                                                id = "artist_online_shuffle_${page.artist.id}",
+                                                title = page.artist.title,
+                                                author = Artist(page.artist.title, null),
+                                                songCountText = "${songs.size} songs",
+                                                thumbnail = page.artist.thumbnail,
+                                                playEndpoint = null,
+                                                shuffleEndpoint = null,
+                                                radioEndpoint = null
+                                            )
+                                            PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                            PlayerManager.playQueue(songs.shuffled(), 0)
+                                        } else {
+                                            PlayerManager.play(page.artist)
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Shuffle,
+                                            contentDescription = null,
+                                            tint = appleRed,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Shuffle",
+                                            color = appleRed,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
                     // Render sections dynamically
                     page.sections.forEach { section ->
                         item {
-                            Text(
-                                text = section.title,
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = section.title,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (section.moreEndpoint != null) {
+                                    Text(
+                                        text = "See all",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            color = appleRed,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        modifier = Modifier.clickable {
+                                            activeSectionEndpoint = Pair(section.title, section.moreEndpoint!!)
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         // Check if items are songs vs albums/playlists
@@ -884,6 +1146,286 @@ fun ArtistOnlineDetailView(
                 }
             }
         }
+
+        // Section details overlay screen
+        AnimatedVisibility(
+            visible = activeSectionEndpoint != null,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            activeSectionEndpoint?.let { (title, endpoint) ->
+                ArtistSectionDetailView(
+                    title = title,
+                    endpoint = endpoint,
+                    appleRed = appleRed,
+                    onBack = { activeSectionEndpoint = null }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ArtistSectionDetailView(
+    title: String,
+    endpoint: BrowseEndpoint,
+    appleRed: Color,
+    onBack: () -> Unit
+) {
+    var items by remember { mutableStateOf<List<YTItem>>(emptyList()) }
+    var continuationToken by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var isMoreLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(endpoint) {
+        isLoading = true
+        error = null
+        try {
+            val result = withContext(Dispatchers.IO) { YouTube.artistItems(endpoint) }
+            result.onSuccess { page ->
+                items = page.items
+                continuationToken = page.continuation
+            }.onFailure { e ->
+                error = e.message ?: "Failed to load items"
+            }
+        } catch (e: Exception) {
+            error = e.message ?: "An error occurred"
+        } finally {
+            isLoading = false
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header Top Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CupertinoActivityIndicator(modifier = Modifier.size(48.dp))
+                }
+            } else if (error != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Rounded.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                        Text(text = error!!, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                val lazyListState = rememberLazyListState()
+
+                // Detect when user scrolls near the bottom to trigger loading more
+                val shouldLoadMore = remember {
+                    derivedStateOf {
+                        val lastVisibleItem = lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()
+                        val totalItems = lazyListState.layoutInfo.totalItemsCount
+                        lastVisibleItem != null && lastVisibleItem.index >= totalItems - 3 && continuationToken != null && !isMoreLoading
+                    }
+                }
+
+                LaunchedEffect(shouldLoadMore.value) {
+                    if (shouldLoadMore.value && continuationToken != null) {
+                        isMoreLoading = true
+                        try {
+                            val result = withContext(Dispatchers.IO) {
+                                YouTube.artistItemsContinuation(continuationToken!!)
+                            }
+                            result.onSuccess { page ->
+                                items = items + page.items
+                                continuationToken = page.continuation
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("ArtistSectionDetail", "Error loading continuation", e)
+                        } finally {
+                            isMoreLoading = false
+                        }
+                    }
+                }
+
+                val songs = remember(items) { items.filterIsInstance<SongItem>() }
+
+                LazyColumn(
+                    state = lazyListState,
+                    contentPadding = PaddingValues(bottom = 150.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (songs.isNotEmpty()) {
+                        // All items in the list are songs (or we treat them as songs)
+                        itemsIndexed(songs) { index, songItem ->
+                            val isCurrentlyPlaying = PlayerManager.currentSong.collectAsState().value?.id == songItem.id
+                            LibrarySongRow(
+                                songItem = songItem,
+                                index = index,
+                                isCurrentlyPlaying = isCurrentlyPlaying,
+                                appleRed = appleRed,
+                                onClick = {
+                                    val playlistItem = PlaylistItem(
+                                        id = "artist_section_${endpoint.browseId}",
+                                        title = title,
+                                        author = Artist(songItem.artists.firstOrNull()?.name ?: "", null),
+                                        songCountText = "${songs.size} songs",
+                                        thumbnail = songItem.thumbnail,
+                                        playEndpoint = null,
+                                        shuffleEndpoint = null,
+                                        radioEndpoint = null
+                                    )
+                                    PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                    PlayerManager.playQueue(songs, index)
+                                }
+                            )
+                        }
+                    } else {
+                        // Items are albums, playlists, etc.
+                        items(items) { item ->
+                            when (item) {
+                                is AlbumItem -> {
+                                    LibraryAlbumListItem(
+                                        title = item.title,
+                                        subtitle = item.year?.toString() ?: "Album",
+                                        thumbnail = item.thumbnail,
+                                        onClick = {
+                                            PlayerManager.activePlaylistDetail.value = item
+                                        }
+                                    )
+                                }
+                                is PlaylistItem -> {
+                                    LibraryAlbumListItem(
+                                        title = item.title,
+                                        subtitle = item.songCountText ?: "Playlist",
+                                        thumbnail = item.thumbnail,
+                                        onClick = {
+                                            PlayerManager.activePlaylistDetail.value = item
+                                        }
+                                    )
+                                }
+                                is SongItem -> {
+                                    val isCurrentlyPlaying = PlayerManager.currentSong.collectAsState().value?.id == item.id
+                                    LibrarySongRow(
+                                        songItem = item,
+                                        index = 0,
+                                        isCurrentlyPlaying = isCurrentlyPlaying,
+                                        appleRed = appleRed,
+                                        onClick = {
+                                            PlayerManager.play(item)
+                                        }
+                                    )
+                                }
+                                else -> {}
+                            }
+                        }
+                    }
+
+                    if (isMoreLoading) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CupertinoActivityIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LibraryAlbumListItem(
+    title: String,
+    subtitle: String,
+    thumbnail: String?,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            if (!thumbnail.isNullOrEmpty()) {
+                AsyncImage(
+                    model = thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    Icons.Rounded.Album,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp).align(Alignment.Center),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
