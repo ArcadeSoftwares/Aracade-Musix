@@ -1431,6 +1431,15 @@ fun MainScreen() {
         }
 
         com.arcadesoftware.musix.components.FloatingHeartsContainer()
+
+        // Status bar protector to ensure scrolling content doesn't overlap system notifications
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f))
+        )
     }
 }
 
