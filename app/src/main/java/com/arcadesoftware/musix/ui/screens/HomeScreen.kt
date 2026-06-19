@@ -257,9 +257,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     )
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
+        val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 48.dp, bottom = 120.dp),
+            contentPadding = PaddingValues(top = topPadding, bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
             item {
