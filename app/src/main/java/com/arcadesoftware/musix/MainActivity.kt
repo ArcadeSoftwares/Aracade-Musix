@@ -75,8 +75,12 @@ object PlayerManager {
     private const val ACTION_PREVIOUS = "com.arcadesoftware.musix.ACTION_PREVIOUS"
     private const val ACTION_NEXT = "com.arcadesoftware.musix.ACTION_NEXT"
     private const val ACTION_DISMISS = "com.arcadesoftware.musix.ACTION_DISMISS"
+    private const val ACTION_REWIND_10 = "com.arcadesoftware.musix.ACTION_REWIND_10"
+    private const val ACTION_FORWARD_10 = "com.arcadesoftware.musix.ACTION_FORWARD_10"
+    private const val ACTION_LIKE = "com.arcadesoftware.musix.ACTION_LIKE"
 
     val currentSong = MutableStateFlow<YTItem?>(null)
+    val isCurrentSongLiked = MutableStateFlow(false)
     val isPlaying = MutableStateFlow(false)
     val currentPosition = MutableStateFlow(0L)
     val currentDuration = MutableStateFlow(0L)
@@ -97,6 +101,34 @@ object PlayerManager {
     val downloadProgressMap = MutableStateFlow<Map<String, Float>>(emptyMap())
 
     private var simpleCache: androidx.media3.datasource.cache.SimpleCache? = null
+
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+
+    private fun acquireWakeLock() {
+        try {
+            if (wakeLock == null) {
+                val powerManager = appContext?.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                wakeLock = powerManager?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Musix:PlaybackWakeLock")
+            }
+            if (wakeLock?.isHeld == false) {
+                wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout for safety
+                android.util.Log.d(TAG, "WakeLock acquired")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to acquire WakeLock", e)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                android.util.Log.d(TAG, "WakeLock released")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to release WakeLock", e)
+        }
+    }
 
     @Synchronized
     private fun getCache(context: Context): androidx.media3.datasource.cache.SimpleCache {
@@ -188,6 +220,9 @@ object PlayerManager {
                 addAction(ACTION_PREVIOUS)
                 addAction(ACTION_NEXT)
                 addAction(ACTION_DISMISS)
+                addAction(ACTION_REWIND_10)
+                addAction(ACTION_FORWARD_10)
+                addAction(ACTION_LIKE)
             }
             val receiver = object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: Context, intent: android.content.Intent) {
@@ -198,6 +233,15 @@ object PlayerManager {
                         ACTION_NEXT -> playNext()
                         ACTION_DISMISS -> {
                             appContext?.let { PlaybackService.stop(it) }
+                        }
+                        ACTION_REWIND_10 -> seekBy(-10_000L)
+                        ACTION_FORWARD_10 -> seekBy(10_000L)
+                        ACTION_LIKE -> {
+                            val context = appContext ?: return
+                            val song = currentSong.value ?: return
+                            val nowLiked = com.arcadesoftware.musix.db.LikedSongsManager.toggleLikeSong(context, song.id)
+                            isCurrentSongLiked.value = nowLiked
+                            showOrUpdateNotification()
                         }
                     }
                 }
@@ -217,6 +261,17 @@ object PlayerManager {
                         android.util.Log.i(TAG, "Initialized guest session visitorData successfully: $newData")
                     }.onFailure { e ->
                         android.util.Log.e(TAG, "Failed to initialize guest session visitorData: ${e.message}", e)
+                    }
+                }
+            }
+
+            scope.launch {
+                currentSong.collect { song ->
+                    val context = appContext
+                    isCurrentSongLiked.value = if (context != null && song != null) {
+                        com.arcadesoftware.musix.db.LikedSongsManager.isSongLiked(context, song.id)
+                    } else {
+                        false
                     }
                 }
             }
@@ -259,7 +314,14 @@ object PlayerManager {
 
                     appContext?.let { ctx ->
                         if (playing) {
+                            acquireWakeLock()
                             PlaybackService.start(ctx)
+                        } else {
+                            val state = exoPlayer?.playbackState
+                            if (state != androidx.media3.common.Player.STATE_ENDED &&
+                                state != androidx.media3.common.Player.STATE_BUFFERING) {
+                                releaseWakeLock()
+                            }
                         }
                     }
                 }
@@ -270,6 +332,7 @@ object PlayerManager {
                         androidx.media3.common.Player.STATE_BUFFERING -> "BUFFERING"
                         androidx.media3.common.Player.STATE_READY -> "READY"
                         androidx.media3.common.Player.STATE_ENDED -> {
+                            acquireWakeLock()
                             val currentIndex = currentQueueIndex.value
                             val currentQueue = queue.value
                             if (currentIndex < currentQueue.size - 1) {
@@ -286,10 +349,16 @@ object PlayerManager {
                                                 queue.value = newQueue
                                                 currentQueueIndex.value = currentIndex + 1
                                                 playInternal(newQueue[currentIndex + 1])
+                                            } else {
+                                                releaseWakeLock()
                                             }
+                                        }.onFailure {
+                                            releaseWakeLock()
                                         }
                                     }
-                                }
+                                } ?: releaseWakeLock()
+                            } else {
+                                releaseWakeLock()
                             }
                             "ENDED"
                         }
@@ -471,6 +540,7 @@ object PlayerManager {
             playInternal(currentQueue[currentIndex + 1])
         } else if (autoPlayEnabled.value) {
             currentSong.value?.let { song ->
+                acquireWakeLock()
                 scope.launch {
                     val endpoint = WatchEndpoint(videoId = song.id)
                     YouTube.next(endpoint).onSuccess { nextResult ->
@@ -480,7 +550,11 @@ object PlayerManager {
                             queue.value = newQueue
                             currentQueueIndex.value = currentIndex + 1
                             playInternal(newQueue[currentIndex + 1])
+                        } else {
+                            releaseWakeLock()
                         }
+                    }.onFailure {
+                        releaseWakeLock()
                     }
                 }
             }
@@ -503,6 +577,7 @@ object PlayerManager {
     }
 
     private fun playInternal(item: YTItem) {
+        acquireWakeLock()
         scope.launch {
             android.util.Log.d(TAG, "Resolving item: class=${item::class.java.simpleName}, id=${item.id}")
             val resolvedSong = when (item) {
@@ -569,6 +644,7 @@ object PlayerManager {
 
             if (resolvedSong == null) {
                 android.util.Log.e(TAG, "Could not resolve a song for item: $item")
+                releaseWakeLock()
                 return@launch
             }
 
@@ -685,6 +761,7 @@ object PlayerManager {
                 }
             } else {
                 android.util.Log.e(TAG, "All clients failed for videoId=$videoId")
+                releaseWakeLock()
             }
         }
     }
@@ -724,6 +801,19 @@ object PlayerManager {
         }
     }
 
+    fun seekBy(offsetMs: Long) {
+        exoPlayer?.let { player ->
+            val duration = player.duration
+            if (duration > 0) {
+                val current = player.currentPosition
+                val target = (current + offsetMs).coerceIn(0L, duration)
+                player.seekTo(target)
+                currentPosition.value = target
+                updatePlaybackState(target)
+            }
+        }
+    }
+
     private fun updatePlaybackState(overridePosition: Long? = null) {
         val session = mediaSession ?: return
         val player = exoPlayer ?: return
@@ -747,6 +837,8 @@ object PlayerManager {
 
             currentMetadataBitmap?.let { bitmap ->
                 metadataBuilder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, bitmap)
+                metadataBuilder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ART, bitmap)
+                metadataBuilder.putBitmap(android.media.MediaMetadata.METADATA_KEY_DISPLAY_ICON, bitmap)
             }
             session.setMetadata(metadataBuilder.build())
         }
@@ -783,9 +875,12 @@ object PlayerManager {
             0L
         }
 
+        val isDifferentSong = song.id != currentMetadataSongId
         currentMetadataSongId = song.id
         currentMetadataDuration = targetDuration
-        currentMetadataBitmap = null // Reset bitmap for new song
+        if (isDifferentSong) {
+            currentMetadataBitmap = null // Reset bitmap only for a different song
+        }
 
         val metadataBuilder = android.media.MediaMetadata.Builder()
             .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, song.title)
@@ -793,12 +888,17 @@ object PlayerManager {
         if (targetDuration > 0) {
             metadataBuilder.putLong(android.media.MediaMetadata.METADATA_KEY_DURATION, targetDuration)
         }
+        currentMetadataBitmap?.let { bitmap ->
+            metadataBuilder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, bitmap)
+            metadataBuilder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ART, bitmap)
+            metadataBuilder.putBitmap(android.media.MediaMetadata.METADATA_KEY_DISPLAY_ICON, bitmap)
+        }
         session.setMetadata(metadataBuilder.build())
 
         updatePlaybackState()
         showOrUpdateNotification()
 
-        if (song.thumbnail.isNotEmpty() && song.thumbnail != lastThumbnailUrl) {
+        if (song.thumbnail.isNotEmpty() && (isDifferentSong || currentMetadataBitmap == null)) {
             lastThumbnailUrl = song.thumbnail
             scope.launch(Dispatchers.IO) {
                 val context = appContext ?: return@launch
@@ -845,6 +945,8 @@ object PlayerManager {
                                 .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, song.title)
                                 .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, song.artists.joinToString { it.name })
                                 .putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, b)
+                                .putBitmap(android.media.MediaMetadata.METADATA_KEY_ART, b)
+                                .putBitmap(android.media.MediaMetadata.METADATA_KEY_DISPLAY_ICON, b)
                             if (currentMetadataDuration > 0) {
                                 meta.putLong(android.media.MediaMetadata.METADATA_KEY_DURATION, currentMetadataDuration)
                             }
@@ -896,6 +998,18 @@ object PlayerManager {
             context, 5, android.content.Intent(ACTION_DISMISS),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
+        val likeIntent = android.app.PendingIntent.getBroadcast(
+            context, 6, android.content.Intent(ACTION_LIKE),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val rewindIntent = android.app.PendingIntent.getBroadcast(
+            context, 7, android.content.Intent(ACTION_REWIND_10),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val forwardIntent = android.app.PendingIntent.getBroadcast(
+            context, 8, android.content.Intent(ACTION_FORWARD_10),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
 
         val mainActivityIntent = android.content.Intent(context, MainActivity::class.java).apply {
             flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -924,9 +1038,17 @@ object PlayerManager {
             builder.setLargeIcon(bitmapToUse)
         }
 
+        val likeIconRes = if (isCurrentSongLiked.value) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline
+        val likeTitle = if (isCurrentSongLiked.value) "Unlike" else "Like"
+
         builder.addAction(
             android.app.Notification.Action.Builder(
-                android.R.drawable.ic_media_previous, "Previous", prevIntent
+                likeIconRes, likeTitle, likeIntent
+            ).build()
+        )
+        builder.addAction(
+            android.app.Notification.Action.Builder(
+                R.drawable.ic_replay_10, "Rewind 10s", rewindIntent
             ).build()
         )
         if (isPlayingVal) {
@@ -944,13 +1066,18 @@ object PlayerManager {
         }
         builder.addAction(
             android.app.Notification.Action.Builder(
+                R.drawable.ic_forward_10, "Forward 10s", forwardIntent
+            ).build()
+        )
+        builder.addAction(
+            android.app.Notification.Action.Builder(
                 android.R.drawable.ic_media_next, "Next", nextIntent
             ).build()
         )
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             val style = android.app.Notification.MediaStyle()
-                .setShowActionsInCompactView(0, 1, 2)
+                .setShowActionsInCompactView(0, 2, 4)
             mediaSession?.let {
                 style.setMediaSession(it.sessionToken)
             }
@@ -1110,7 +1237,11 @@ fun MainScreen() {
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
         ) {
             val currentBackdrop = if (activePlaylistDetail != null) playlistBackdrop else mainBackdrop
-            MiniPlayer(backdrop = currentBackdrop, currentSong = currentSong)
+            MiniPlayer(
+                backdrop = currentBackdrop,
+                currentSong = currentSong,
+                collapsedBottomPadding = if (showBottomBar) 112.dp else 24.dp
+            )
         }
 
         com.arcadesoftware.musix.components.FloatingHeartsContainer()
@@ -1132,6 +1263,7 @@ fun AppBottomBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 24.dp)
             .height(64.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1350,6 +1482,7 @@ fun MiniPlayer(
             }
     } else {
         modifier
+            .navigationBarsPadding()
             .padding(bottom = bottomPadding, start = startPadding, end = endPadding)
             .width(animatedWidth)
             .height(64.dp)
@@ -1757,9 +1890,7 @@ fun MiniPlayer(
                             )
                         }
                         val context = LocalContext.current
-                        var isSongLiked by remember(currentSong?.id) {
-                            mutableStateOf(currentSong?.id?.let { com.arcadesoftware.musix.db.LikedSongsManager.isSongLiked(context, it) } ?: false)
-                        }
+                        val isSongLiked by PlayerManager.isCurrentSongLiked.collectAsState()
                         Icon(
                             imageVector = if (isSongLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                             contentDescription = "Like",
@@ -1769,10 +1900,11 @@ fun MiniPlayer(
                                 .clickable {
                                     currentSong?.id?.let { songId ->
                                         val nowLiked = com.arcadesoftware.musix.db.LikedSongsManager.toggleLikeSong(context, songId)
-                                        isSongLiked = nowLiked
+                                        PlayerManager.isCurrentSongLiked.value = nowLiked
                                         if (nowLiked) {
                                             com.arcadesoftware.musix.components.HeartAnimManager.trigger()
                                         }
+                                        PlayerManager.triggerNotificationUpdate()
                                     }
                                 }
                         )
@@ -1805,7 +1937,7 @@ fun MiniPlayer(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Time labels
                     val displayPosition = if (sliderDragValue != null && currentDuration > 0)

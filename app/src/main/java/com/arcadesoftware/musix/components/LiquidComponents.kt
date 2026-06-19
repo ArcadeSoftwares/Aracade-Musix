@@ -210,6 +210,7 @@ class DampedDragAnimation(
                 release()
             }
         ) { change, dragAmount ->
+            change.consume()
             onDrag(size, dragAmount)
         }
     }
