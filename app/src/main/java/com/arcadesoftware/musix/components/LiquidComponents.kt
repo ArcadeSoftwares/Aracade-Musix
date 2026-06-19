@@ -874,106 +874,141 @@ fun LiquidSlider(
                 }
         }
 
-        Box(Modifier.layerBackdrop(trackBackdrop)) {
-            Box(
-                Modifier
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(trackColor)
-                    .pointerInput(animationScope) {
-                        detectTapGestures { position ->
-                            val delta = (valueRange.endInclusive - valueRange.start) * (position.x / trackWidth)
-                            val targetValue =
-                                (if (isLtr) valueRange.start + delta
-                                else valueRange.endInclusive - delta)
-                                    .coerceIn(valueRange)
-                            dampedDragAnimation.animateToValue(targetValue)
-                            onValueChange(targetValue)
-                            onValueChangeFinished?.invoke()
-                        }
-                    }
-                    .height(6f.dp)
-                    .fillMaxWidth()
-            )
-
-            Box(
-                Modifier
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(accentColor)
-                    .height(6f.dp)
-                    .layout { measurable, constraints ->
-                        val placeable = measurable.measure(constraints)
-                        val width = (constraints.maxWidth * dampedDragAnimation.progress).roundToInt()
-                        layout(width, placeable.height) {
-                            placeable.place(0, 0)
-                        }
-                    }
-            )
-        }
-
         Box(
-            Modifier
-                .graphicsLayer {
-                    translationX =
-                        (-size.width / 2f + trackWidth * dampedDragAnimation.progress)
-                            .coerceIn(-size.width / 4f, trackWidth - size.width * 3f / 4f) * if (isLtr) 1f else -1f
-                }
-                .then(dampedDragAnimation.modifier)
-                .drawBackdrop(
-                    backdrop = com.kyant.backdrop.backdrops.rememberCombinedBackdrop(
-                        backdrop,
-                        com.kyant.backdrop.backdrops.rememberBackdrop(trackBackdrop) { drawBackdrop ->
-                            val progress = dampedDragAnimation.pressProgress
-                            val scaleX = androidx.compose.ui.util.lerp(2f / 3f, 1f, progress)
-                            val scaleY = androidx.compose.ui.util.lerp(0f, 1f, progress)
-                            scale(scaleX, scaleY) {
-                                drawBackdrop()
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .pointerInput(isLtr, trackWidth) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        dampedDragAnimation.press()
+                        
+                        // Calculate initial value and notify
+                        val rawProgress = (down.position.x / trackWidth).coerceIn(0f, 1f)
+                        val progress = if (isLtr) rawProgress else 1f - rawProgress
+                        val targetVal = valueRange.start + progress * (valueRange.endInclusive - valueRange.start)
+                        onValueChange(targetVal)
+                        
+                        var pointerId = down.id
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val changes = event.changes
+                            var pointerChange: PointerInputChange? = null
+                            for (i in changes.indices) {
+                                if (changes[i].id == pointerId) {
+                                    pointerChange = changes[i]
+                                    break
+                                }
+                            }
+                            if (pointerChange == null) break
+                            
+                            if (pointerChange.changedToUpIgnoreConsumed()) {
+                                dampedDragAnimation.release()
+                                onValueChangeFinished?.invoke()
+                                break
+                            } else {
+                                val currentX = pointerChange.position.x
+                                val currentRawProgress = (currentX / trackWidth).coerceIn(0f, 1f)
+                                val currentProgress = if (isLtr) currentRawProgress else 1f - currentRawProgress
+                                val newVal = valueRange.start + currentProgress * (valueRange.endInclusive - valueRange.start)
+                                onValueChange(newVal)
+                                pointerChange.consume()
                             }
                         }
-                    ),
-                    shape = { androidx.compose.foundation.shape.CircleShape },
-                    effects = {
-                        val progress = dampedDragAnimation.pressProgress
-                        blur(8f.dp.toPx() * (1f - progress))
-                        lens(
-                            10f.dp.toPx() * progress,
-                            14f.dp.toPx() * progress,
-                            chromaticAberration = true
-                        )
-                    },
-                    highlight = {
-                        val progress = dampedDragAnimation.pressProgress
-                        com.kyant.backdrop.highlight.Highlight.Ambient.copy(
-                            width = com.kyant.backdrop.highlight.Highlight.Ambient.width / 1.5f,
-                            blurRadius = com.kyant.backdrop.highlight.Highlight.Ambient.blurRadius / 1.5f,
-                            alpha = progress
-                        )
-                    },
-                    shadow = {
-                        com.kyant.backdrop.shadow.Shadow(
-                            radius = 4f.dp,
-                            color = Color.Black.copy(alpha = 0.05f)
-                        )
-                    },
-                    innerShadow = {
-                        val progress = dampedDragAnimation.pressProgress
-                        com.kyant.backdrop.shadow.InnerShadow(
-                            radius = 4f.dp * progress,
-                            alpha = progress
-                        )
-                    },
-                    layerBlock = {
-                        scaleX = dampedDragAnimation.scaleX
-                        scaleY = dampedDragAnimation.scaleY
-                        val velocity = dampedDragAnimation.velocity / 10f
-                        scaleX /= 1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f)
-                        scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
-                    },
-                    onDrawSurface = {
-                        val progress = dampedDragAnimation.pressProgress
-                        drawRect(Color.White.copy(alpha = 1f - progress))
                     }
+                },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            // Track Box
+            Box(Modifier.layerBackdrop(trackBackdrop)) {
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(trackColor)
+                        .height(6f.dp)
+                        .fillMaxWidth()
                 )
-                .size(40f.dp, 24f.dp)
-        )
+
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(accentColor)
+                        .height(6f.dp)
+                        .layout { measurable, constraints ->
+                            val placeable = measurable.measure(constraints)
+                            val width = (constraints.maxWidth * dampedDragAnimation.progress).roundToInt()
+                            layout(width, placeable.height) {
+                                placeable.place(0, 0)
+                            }
+                        }
+                )
+            }
+
+            // Thumb Box
+            Box(
+                Modifier
+                    .graphicsLayer {
+                        translationX =
+                            (-size.width / 2f + trackWidth * dampedDragAnimation.progress)
+                                .coerceIn(-size.width / 4f, trackWidth - size.width * 3f / 4f) * if (isLtr) 1f else -1f
+                    }
+                    .drawBackdrop(
+                        backdrop = com.kyant.backdrop.backdrops.rememberCombinedBackdrop(
+                            backdrop,
+                            com.kyant.backdrop.backdrops.rememberBackdrop(trackBackdrop) { drawBackdrop ->
+                                val progress = dampedDragAnimation.pressProgress
+                                val scaleX = androidx.compose.ui.util.lerp(2f / 3f, 1f, progress)
+                                val scaleY = androidx.compose.ui.util.lerp(0f, 1f, progress)
+                                scale(scaleX, scaleY) {
+                                    drawBackdrop()
+                                }
+                            }
+                        ),
+                        shape = { CircleShape },
+                        effects = {
+                            val progress = dampedDragAnimation.pressProgress
+                            blur(8f.dp.toPx() * (1f - progress))
+                            lens(
+                                10f.dp.toPx() * progress,
+                                14f.dp.toPx() * progress,
+                                chromaticAberration = true
+                            )
+                        },
+                        highlight = {
+                            val progress = dampedDragAnimation.pressProgress
+                            com.kyant.backdrop.highlight.Highlight.Ambient.copy(
+                                width = com.kyant.backdrop.highlight.Highlight.Ambient.width / 1.5f,
+                                blurRadius = com.kyant.backdrop.highlight.Highlight.Ambient.blurRadius / 1.5f,
+                                alpha = progress
+                            )
+                        },
+                        shadow = {
+                            com.kyant.backdrop.shadow.Shadow(
+                                radius = 4f.dp,
+                                color = Color.Black.copy(alpha = 0.05f)
+                            )
+                        },
+                        innerShadow = {
+                            val progress = dampedDragAnimation.pressProgress
+                            com.kyant.backdrop.shadow.InnerShadow(
+                                radius = 4f.dp * progress,
+                                alpha = progress
+                            )
+                        },
+                        layerBlock = {
+                            scaleX = dampedDragAnimation.scaleX
+                            scaleY = dampedDragAnimation.scaleY
+                            val velocity = dampedDragAnimation.velocity / 10f
+                            scaleX /= 1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f)
+                            scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
+                        },
+                        onDrawSurface = {
+                            val progress = dampedDragAnimation.pressProgress
+                            drawRect(Color.White.copy(alpha = 1f - progress))
+                        }
+                    )
+                    .size(40f.dp, 24f.dp)
+            )
+        }
     }
 }
