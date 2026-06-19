@@ -1737,74 +1737,88 @@ fun MiniPlayer(
                 horizontalArrangement = Arrangement.Center
             ) {
                 val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
-                val wave1Scale by infiniteTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 1.35f,
+                val siriTime by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = (2f * Math.PI).toFloat(),
                     animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(2000, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
+                        animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
                         repeatMode = androidx.compose.animation.core.RepeatMode.Restart
                     ),
-                    label = "wave1Scale"
-                )
-                val wave1Alpha by infiniteTransition.animateFloat(
-                    initialValue = 0.5f,
-                    targetValue = 0f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(2000, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Restart
-                    ),
-                    label = "wave1Alpha"
-                )
-                val wave2Scale by infiniteTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 1.35f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(2000, delayMillis = 1000, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Restart
-                    ),
-                    label = "wave2Scale"
-                )
-                val wave2Alpha by infiniteTransition.animateFloat(
-                    initialValue = 0.5f,
-                    targetValue = 0f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(2000, delayMillis = 1000, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Restart
-                    ),
-                    label = "wave2Alpha"
+                    label = "siriTime"
                 )
 
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier.size(60.dp)
                 ) {
-                    if (isPlaying) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    scaleX = wave1Scale
-                                    scaleY = wave1Scale
-                                    alpha = wave1Alpha
+                    androidx.compose.foundation.Canvas(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        val baseRadius = 24.dp.toPx() // Around the 48.dp thumbnail
+                        val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+                        
+                        // Fluctuating intensity
+                        val baseIntensity = if (isPlaying) 1f else 0.05f
+                        val pulse = (kotlin.math.sin(siriTime.toDouble()) * 0.25f).toFloat()
+                        val currentIntensity = baseIntensity * (1.0f + pulse)
+
+                        val steps = 80
+                        val maxAmplitude = 8.dp.toPx() // Max height of wave peak
+
+                        // Violet, Cyan, Rose
+                        val layers = listOf(
+                            Triple(
+                                Color(0xFF8B5CF6),
+                                0.65f,
+                                { angle: Float ->
+                                    (kotlin.math.sin(3.0 * angle + siriTime.toDouble()) * 
+                                     kotlin.math.cos(1.0 * angle - siriTime.toDouble() * 0.5)).toFloat()
                                 }
-                                .background(
-                                    color = contentColor.copy(alpha = 0.35f),
-                                    shape = androidx.compose.foundation.shape.CircleShape
-                                )
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    scaleX = wave2Scale
-                                    scaleY = wave2Scale
-                                    alpha = wave2Alpha
+                            ),
+                            Triple(
+                                Color(0xFF06B6D4),
+                                0.6f,
+                                { angle: Float ->
+                                    (kotlin.math.sin(4.0 * angle - siriTime.toDouble() * 0.8) * 
+                                     kotlin.math.sin(2.0 * angle + siriTime.toDouble() * 1.2)).toFloat()
                                 }
-                                .background(
-                                    color = contentColor.copy(alpha = 0.35f),
-                                    shape = androidx.compose.foundation.shape.CircleShape
-                                )
+                            ),
+                            Triple(
+                                Color(0xFFEC4899),
+                                0.55f,
+                                { angle: Float ->
+                                    (kotlin.math.sin(2.0 * angle + siriTime.toDouble() * 1.5) * 
+                                     kotlin.math.cos(3.0 * angle - siriTime.toDouble() * 0.7)).toFloat()
+                                }
+                            )
                         )
+
+                        layers.forEach { (color, alpha, waveFunc) ->
+                            val path = androidx.compose.ui.graphics.Path()
+                            for (i in 0 until steps) {
+                                val angle = (i * 2f * Math.PI / steps).toFloat()
+                                val waveFactor = waveFunc(angle) * currentIntensity
+                                val r = baseRadius + maxAmplitude * waveFactor
+                                
+                                val x = center.x + r * kotlin.math.cos(angle).toFloat()
+                                val y = center.y + r * kotlin.math.sin(angle).toFloat()
+                                
+                                if (i == 0) {
+                                    path.moveTo(x, y)
+                                } else {
+                                    path.lineTo(x, y)
+                                }
+                            }
+                            path.close()
+                            
+                            drawPath(
+                                path = path,
+                                color = color,
+                                alpha = alpha,
+                                style = androidx.compose.ui.graphics.drawscope.Fill,
+                                blendMode = androidx.compose.ui.graphics.BlendMode.Plus
+                            )
+                        }
                     }
                     Box(
                         modifier = Modifier
