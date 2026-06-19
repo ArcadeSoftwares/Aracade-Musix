@@ -39,6 +39,8 @@ import com.kyant.backdrop.catalog.components.LiquidBottomTab
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.effects.blur
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.arcadesoftware.musix.ui.screens.HomeScreen
@@ -1444,8 +1446,8 @@ fun MainScreen() {
                     backdrop = if (activePlaylistDetail != null) playlistBackdrop else mainBackdrop,
                     shape = { androidx.compose.ui.graphics.RectangleShape },
                     effects = {
-                        com.kyant.backdrop.effects.vibrancy()
-                        com.kyant.backdrop.effects.blur(16f.dp.toPx())
+                        vibrancy()
+                        blur(16f.dp.toPx())
                     },
                     layerBlock = {},
                     onDrawSurface = {
