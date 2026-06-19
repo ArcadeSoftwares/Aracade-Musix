@@ -894,18 +894,6 @@ object PlayerManager {
             likeIconRes
         ).build()
 
-        val rewindCustom = android.media.session.PlaybackState.CustomAction.Builder(
-            ACTION_REWIND_10,
-            "Rewind 10s",
-            R.drawable.ic_replay_10
-        ).build()
-
-        val forwardCustom = android.media.session.PlaybackState.CustomAction.Builder(
-            ACTION_FORWARD_10,
-            "Forward 10s",
-            R.drawable.ic_forward_10
-        ).build()
-
         val playbackState = android.media.session.PlaybackState.Builder()
             .setState(state, position, 1.0f)
             .setActions(
@@ -918,8 +906,6 @@ object PlayerManager {
                         android.media.session.PlaybackState.ACTION_REWIND
             )
             .addCustomAction(likeCustom)
-            .addCustomAction(rewindCustom)
-            .addCustomAction(forwardCustom)
             .build()
 
         session.setPlaybackState(playbackState)
@@ -1135,16 +1121,7 @@ object PlayerManager {
                 android.R.drawable.ic_media_next, "Next", nextIntent
             ).build()
         )
-        builder.addAction(
-            android.app.Notification.Action.Builder(
-                R.drawable.ic_replay_10, "Rewind 10s", rewindIntent
-            ).build()
-        )
-        builder.addAction(
-            android.app.Notification.Action.Builder(
-                R.drawable.ic_forward_10, "Forward 10s", forwardIntent
-            ).build()
-        )
+
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             val style = android.app.Notification.MediaStyle()
