@@ -193,21 +193,31 @@ object PlayerManager {
                 isActive = true
                 setCallback(object : android.media.session.MediaSession.Callback() {
                     override fun onPlay() {
-                        exoPlayer?.play()
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            exoPlayer?.play()
+                        }
                     }
                     override fun onPause() {
-                        exoPlayer?.pause()
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            exoPlayer?.pause()
+                        }
                     }
                     override fun onSkipToNext() {
-                        // Skip to next if playlist is active
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            playNext()
+                        }
                     }
                     override fun onSkipToPrevious() {
-                        exoPlayer?.seekTo(0)
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            playPrevious()
+                        }
                     }
                     override fun onSeekTo(pos: Long) {
-                        exoPlayer?.seekTo(pos)
-                        currentPosition.value = pos
-                        updatePlaybackState(pos)
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            exoPlayer?.seekTo(pos)
+                            currentPosition.value = pos
+                            updatePlaybackState(pos)
+                        }
                     }
                 })
             }
@@ -981,35 +991,35 @@ object PlayerManager {
         }
 
         val playIntent = android.app.PendingIntent.getBroadcast(
-            context, 0, android.content.Intent(ACTION_PLAY),
+            context, 0, android.content.Intent(ACTION_PLAY).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val pauseIntent = android.app.PendingIntent.getBroadcast(
-            context, 1, android.content.Intent(ACTION_PAUSE),
+            context, 1, android.content.Intent(ACTION_PAUSE).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val prevIntent = android.app.PendingIntent.getBroadcast(
-            context, 2, android.content.Intent(ACTION_PREVIOUS),
+            context, 2, android.content.Intent(ACTION_PREVIOUS).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val nextIntent = android.app.PendingIntent.getBroadcast(
-            context, 3, android.content.Intent(ACTION_NEXT),
+            context, 3, android.content.Intent(ACTION_NEXT).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val dismissIntent = android.app.PendingIntent.getBroadcast(
-            context, 5, android.content.Intent(ACTION_DISMISS),
+            context, 5, android.content.Intent(ACTION_DISMISS).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val likeIntent = android.app.PendingIntent.getBroadcast(
-            context, 6, android.content.Intent(ACTION_LIKE),
+            context, 6, android.content.Intent(ACTION_LIKE).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val rewindIntent = android.app.PendingIntent.getBroadcast(
-            context, 7, android.content.Intent(ACTION_REWIND_10),
+            context, 7, android.content.Intent(ACTION_REWIND_10).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val forwardIntent = android.app.PendingIntent.getBroadcast(
-            context, 8, android.content.Intent(ACTION_FORWARD_10),
+            context, 8, android.content.Intent(ACTION_FORWARD_10).setPackage(context.packageName),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -1050,7 +1060,7 @@ object PlayerManager {
         )
         builder.addAction(
             android.app.Notification.Action.Builder(
-                R.drawable.ic_replay_10, "Rewind 10s", rewindIntent
+                android.R.drawable.ic_media_previous, "Previous", prevIntent
             ).build()
         )
         if (isPlayingVal) {
@@ -1068,18 +1078,18 @@ object PlayerManager {
         }
         builder.addAction(
             android.app.Notification.Action.Builder(
-                R.drawable.ic_forward_10, "Forward 10s", forwardIntent
+                android.R.drawable.ic_media_next, "Next", nextIntent
             ).build()
         )
         builder.addAction(
             android.app.Notification.Action.Builder(
-                android.R.drawable.ic_media_next, "Next", nextIntent
+                R.drawable.ic_replay_10, "Rewind 10s", rewindIntent
             ).build()
         )
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             val style = android.app.Notification.MediaStyle()
-                .setShowActionsInCompactView(0, 2, 4)
+                .setShowActionsInCompactView(1, 2, 3) // Previous (1), Play/Pause (2), Next (3)
             mediaSession?.let {
                 style.setMediaSession(it.sessionToken)
             }
