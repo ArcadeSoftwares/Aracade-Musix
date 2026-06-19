@@ -21,6 +21,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -1737,86 +1738,51 @@ fun MiniPlayer(
                 horizontalArrangement = Arrangement.Center
             ) {
                 val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
-                val siriTime by infiniteTransition.animateFloat(
+                val rotationAngle by infiniteTransition.animateFloat(
                     initialValue = 0f,
-                    targetValue = (2f * Math.PI).toFloat(),
+                    targetValue = 360f,
                     animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
+                        animation = androidx.compose.animation.core.tween(4000, easing = androidx.compose.animation.core.LinearEasing),
                         repeatMode = androidx.compose.animation.core.RepeatMode.Restart
                     ),
-                    label = "siriTime"
+                    label = "ringRotation"
                 )
 
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(60.dp)
+                    modifier = Modifier.size(56.dp)
                 ) {
                     androidx.compose.foundation.Canvas(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        val baseRadius = 24.dp.toPx() // Around the 48.dp thumbnail
-                        val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
-                        
-                        // Fluctuating intensity
-                        val baseIntensity = if (isPlaying) 1f else 0.05f
-                        val pulse = (kotlin.math.sin(siriTime.toDouble()) * 0.25f).toFloat()
-                        val currentIntensity = baseIntensity * (1.0f + pulse)
+                        val strokeWidth = 2.5.dp.toPx()
+                        val sizePx = size.minDimension
+                        val radius = (sizePx - strokeWidth) / 2f
+                        val centerOffset = androidx.compose.ui.geometry.Offset(sizePx / 2f, sizePx / 2f)
 
-                        val steps = 80
-                        val maxAmplitude = 8.dp.toPx() // Max height of wave peak
-
-                        // Violet, Cyan, Rose
-                        val layers = listOf(
-                            Triple(
-                                Color(0xFF8B5CF6),
-                                0.65f,
-                                { angle: Float ->
-                                    (kotlin.math.sin(3.0 * angle + siriTime.toDouble()) * 
-                                     kotlin.math.cos(1.0 * angle - siriTime.toDouble() * 0.5)).toFloat()
-                                }
-                            ),
-                            Triple(
-                                Color(0xFF06B6D4),
-                                0.6f,
-                                { angle: Float ->
-                                    (kotlin.math.sin(4.0 * angle - siriTime.toDouble() * 0.8) * 
-                                     kotlin.math.sin(2.0 * angle + siriTime.toDouble() * 1.2)).toFloat()
-                                }
-                            ),
-                            Triple(
-                                Color(0xFFEC4899),
-                                0.55f,
-                                { angle: Float ->
-                                    (kotlin.math.sin(2.0 * angle + siriTime.toDouble() * 1.5) * 
-                                     kotlin.math.cos(3.0 * angle - siriTime.toDouble() * 0.7)).toFloat()
-                                }
-                            )
-                        )
-
-                        layers.forEach { (color, alpha, waveFunc) ->
-                            val path = androidx.compose.ui.graphics.Path()
-                            for (i in 0 until steps) {
-                                val angle = (i * 2f * Math.PI / steps).toFloat()
-                                val waveFactor = waveFunc(angle) * currentIntensity
-                                val r = baseRadius + maxAmplitude * waveFactor
-                                
-                                val x = center.x + r * kotlin.math.cos(angle).toFloat()
-                                val y = center.y + r * kotlin.math.sin(angle).toFloat()
-                                
-                                if (i == 0) {
-                                    path.moveTo(x, y)
-                                } else {
-                                    path.lineTo(x, y)
-                                }
+                        if (isPlaying) {
+                            rotate(rotationAngle) {
+                                drawCircle(
+                                    brush = androidx.compose.ui.graphics.Brush.sweepGradient(
+                                        colors = listOf(
+                                            Color(0xFFFA243C), // appleRed
+                                            Color(0xFF8B5CF6), // Violet
+                                            Color(0xFF06B6D4), // Cyan
+                                            Color(0xFFEC4899), // Rose
+                                            Color(0xFFFA243C)  // appleRed (to complete smoothly)
+                                        )
+                                    ),
+                                    radius = radius,
+                                    center = centerOffset,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+                                )
                             }
-                            path.close()
-                            
-                            drawPath(
-                                path = path,
-                                color = color,
-                                alpha = alpha,
-                                style = androidx.compose.ui.graphics.drawscope.Fill,
-                                blendMode = androidx.compose.ui.graphics.BlendMode.Plus
+                        } else {
+                            drawCircle(
+                                color = contentColor.copy(alpha = 0.15f),
+                                radius = radius,
+                                center = centerOffset,
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
                             )
                         }
                     }
@@ -2286,6 +2252,78 @@ fun MiniPlayer(
                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                                     indication = null
                                 ) { PlayerManager.playNext() }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // System volume control row
+                    val context = LocalContext.current
+                    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager }
+                    var volumeState by remember {
+                        mutableStateOf(audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
+                    }
+                    val maxVolume = remember { audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) }
+                    var lastVolume by remember { mutableStateOf(volumeState.takeIf { it > 0 } ?: (maxVolume / 2)) }
+
+                    androidx.compose.runtime.DisposableEffect(context) {
+                        val receiver = object : android.content.BroadcastReceiver() {
+                            override fun onReceive(context: Context?, intent: android.content.Intent?) {
+                                volumeState = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                            }
+                        }
+                        val filter = android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+                        context.registerReceiver(receiver, filter)
+                        onDispose {
+                            try {
+                                context.unregisterReceiver(receiver)
+                            } catch (e: Exception) {
+                                // Ignore
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val isMuted = volumeState == 0
+                        Icon(
+                            imageVector = if (isMuted) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
+                            contentDescription = "Mute Toggle",
+                            tint = contentColor.copy(alpha = 0.8f),
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    if (isMuted) {
+                                        val target = if (lastVolume > 0) lastVolume else (maxVolume / 2)
+                                        audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, target, 0)
+                                        volumeState = target
+                                    } else {
+                                        lastVolume = volumeState
+                                        audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0)
+                                        volumeState = 0
+                                    }
+                                }
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        com.arcadesoftware.musix.components.LiquidSlider(
+                            value = { if (maxVolume > 0) volumeState.toFloat() / maxVolume else 0f },
+                            onValueChange = { newVal ->
+                                val targetVol = (newVal * maxVolume).toInt()
+                                audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, targetVol, 0)
+                                volumeState = targetVol
+                            },
+                            valueRange = 0f..1f,
+                            visibilityThreshold = 0.001f,
+                            backdrop = backdrop,
+                            accentColor = Color(0xFFFA243C), // appleRed accent to differentiate from progress slider
+                            modifier = Modifier.weight(1f)
                         )
                     }
 

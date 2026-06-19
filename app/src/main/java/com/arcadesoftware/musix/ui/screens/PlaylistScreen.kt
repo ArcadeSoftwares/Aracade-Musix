@@ -193,6 +193,11 @@ fun PlaylistScreen(
                                 title = item.title,
                                 subtitle = item.subtitle,
                                 thumbnail = item.thumbnail,
+                                isDownloaded = true,
+                                onDeleteClick = {
+                                    com.arcadesoftware.musix.db.DownloadedPlaylistsManager.removeDownloadedPlaylist(context, item.id)
+                                    downloadedPlaylists = downloadedPlaylists.filter { it.id != item.id }
+                                },
                                 onClick = {
                                     val ytItem = if (item.type == "ALBUM") {
                                         AlbumItem(
@@ -235,10 +240,18 @@ fun PlaylistScreen(
                             .padding(bottom = 24.dp)
                     ) {
                         items(likedPlaylists) { item ->
+                            val isDownloaded = com.arcadesoftware.musix.db.DownloadedPlaylistsManager.isPlaylistDownloaded(context, item.id)
                             PlaylistCard(
                                 title = item.title,
                                 subtitle = item.subtitle,
                                 thumbnail = item.thumbnail,
+                                isDownloaded = isDownloaded,
+                                onDeleteClick = if (isDownloaded) {
+                                    {
+                                        com.arcadesoftware.musix.db.DownloadedPlaylistsManager.removeDownloadedPlaylist(context, item.id)
+                                        downloadedPlaylists = com.arcadesoftware.musix.db.DownloadedPlaylistsManager.getDownloadedPlaylists(context)
+                                    }
+                                } else null,
                                 onClick = {
                                     val ytItem = if (item.type == "ALBUM") {
                                         AlbumItem(
@@ -1025,6 +1038,7 @@ private fun PlaylistCard(
     thumbnail: String?,
     onClick: () -> Unit,
     onDeleteClick: (() -> Unit)? = null,
+    isDownloaded: Boolean = false,
     defaultIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.QueueMusic,
     iconContainerColor: Color = MaterialTheme.colorScheme.primary.copy(0.12f),
     iconColor: Color = MaterialTheme.colorScheme.primary
@@ -1060,6 +1074,23 @@ private fun PlaylistCard(
                         contentDescription = null,
                         tint = iconColor,
                         modifier = Modifier.size(48.dp)
+                    )
+                }
+            }
+            if (isDownloaded) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(20.dp)
+                        .background(Color(0xFF22C55E), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.DownloadDone,
+                        contentDescription = "Downloaded",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
