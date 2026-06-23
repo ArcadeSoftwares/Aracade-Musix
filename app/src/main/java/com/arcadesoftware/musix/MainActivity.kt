@@ -1388,7 +1388,33 @@ fun MainScreen() {
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Spacer(Modifier.height(48.dp))
+                Text(
+                    text = "Account",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Rounded.AccountCircle, contentDescription = null) },
+                    label = { Text("Sign in with Google") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        // Handle Google Sign in
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+            }
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             bottomBar = {
@@ -1419,7 +1445,11 @@ fun MainScreen() {
                 contentAlignment = Alignment.Center
             ) {
                 when (selectedTab) {
-                    0 -> HomeScreen()
+                    0 -> HomeScreen(
+                        onOpenDrawer = {
+                            scope.launch { drawerState.open() }
+                        }
+                    )
                     1 -> PlaylistScreen(backdrop = playlistBackdrop)
                     2 -> LibraryScreen(backdrop = playlistBackdrop)
                     3 -> RecommendationsScreen()
@@ -1470,6 +1500,7 @@ fun MainScreen() {
                 .windowInsetsTopHeight(WindowInsets.statusBars)
                 .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f))
         )
+    }
     }
 }
 

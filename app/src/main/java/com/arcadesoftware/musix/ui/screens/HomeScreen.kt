@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -244,7 +245,10 @@ fun Modifier.shimmerEffect(): Modifier = composed {
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
+fun HomeScreen(
+    viewModel: HomeViewModel = viewModel(),
+    onOpenDrawer: () -> Unit = {}
+) {
     val homePage by viewModel.homePage.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedChip by viewModel.selectedChip.collectAsState()
@@ -264,12 +268,26 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
             item {
-                Text(
-                    text = "Musix",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "MUSIX",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(
+                            imageVector = Icons.Rounded.AccountCircle,
+                            contentDescription = "Profile",
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
             }
 
             if (homePage?.chips != null) {
