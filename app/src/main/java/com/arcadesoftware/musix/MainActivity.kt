@@ -1395,7 +1395,17 @@ fun MainScreen() {
     var showAccountSheet by remember { mutableStateOf(false) }
     var currentUser by remember { mutableStateOf(com.google.firebase.auth.FirebaseAuth.getInstance().currentUser) }
     var showWelcomePopup by remember { mutableStateOf(false) }
+    var showCloudSyncPrompt by remember { mutableStateOf(false) }
+    var hasPromptedSync by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(currentUser) {
+        if (currentUser == null && !hasPromptedSync) {
+            hasPromptedSync = true
+            kotlinx.coroutines.delay(2000)
+            showCloudSyncPrompt = true
+        }
+    }
 
     LaunchedEffect(Unit) {
         var lastUid: String? = null
@@ -1744,6 +1754,106 @@ fun MainScreen() {
                         shape = androidx.compose.ui.graphics.RectangleShape
                     ) {
                         Text("OK", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
+                    }
+                }
+            }
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showCloudSyncPrompt,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.8f),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.8f),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            val isLight = !androidx.compose.foundation.isSystemInDarkTheme()
+            val popupAlpha = if (isLight) 0.5f else 0.4f
+            val containerColor = if (isLight) Color.White.copy(alpha = popupAlpha) else Color.Black.copy(alpha = popupAlpha)
+            val popupShape = RoundedCornerShape(14.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { showCloudSyncPrompt = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(270.dp)
+                        .drawBackdrop(
+                            backdrop = mainBackdrop,
+                            shape = { popupShape },
+                            effects = {
+                                vibrancy()
+                                blur(16f.dp.toPx())
+                                lens(12f.dp.toPx(), 24f.dp.toPx())
+                            },
+                            onDrawSurface = {
+                                drawRect(containerColor)
+                            }
+                        )
+                        .border(
+                            width = 0.5.dp,
+                            color = if (isLight) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.15f),
+                            shape = popupShape
+                        )
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) {},
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CloudQueue,
+                            contentDescription = null,
+                            tint = Color(0xFFFA243C),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Cloud Sync",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = if (isLight) Color.Black else Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Sign in with your Google account to back up and sync your library, playlists, recommendations, and history across devices.",
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            color = if (isLight) Color.DarkGray else Color.LightGray
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 0.5.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showCloudSyncPrompt = false },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = androidx.compose.ui.graphics.RectangleShape
+                        ) {
+                            Text("Remind Later", fontSize = 15.sp, color = Color(0xFF007AFF))
+                        }
+                        Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color.Gray.copy(alpha = 0.3f)))
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                showCloudSyncPrompt = false
+                                showAccountSheet = true
+                            },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = androidx.compose.ui.graphics.RectangleShape
+                        ) {
+                            Text("Sign In Now", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
+                        }
                     }
                 }
             }
