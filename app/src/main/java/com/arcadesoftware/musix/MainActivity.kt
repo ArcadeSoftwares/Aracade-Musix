@@ -1971,11 +1971,27 @@ fun MainScreen() {
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = if (updateMessage.isNotEmpty()) updateMessage else "This service is temporarily undergoing maintenance. Please check back later.",
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            color = if (isLight) Color.DarkGray else Color.LightGray
+                        val rawMsg = if (updateMessage.isNotEmpty()) updateMessage else "This service is temporarily undergoing maintenance. Please check back later."
+                        val annotatedText = parseMarkdown(rawMsg)
+                        androidx.compose.foundation.text.ClickableText(
+                            text = annotatedText,
+                            onClick = { offset ->
+                                annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                    .firstOrNull()?.let { annotation ->
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(annotation.item))
+                                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                    }
+                            },
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                color = if (isLight) Color.DarkGray else Color.LightGray
+                            )
                         )
                     }
                 }
@@ -3537,6 +3553,80 @@ suspend fun fetchLrcLibLyrics(title: String, artist: String): String? {
             null
         } catch (e: Exception) {
             null
+        }
+    }
+}
+
+@Composable
+fun parseMarkdown(text: String): androidx.compose.ui.text.AnnotatedString {
+    return androidx.compose.ui.text.buildAnnotatedString {
+        val parts = text.split("\n")
+        parts.forEachIndexed { lineIdx, line ->
+            var currentLine = line
+            val isBullet = currentLine.startsWith("* ") || currentLine.startsWith("- ")
+            if (isBullet) {
+                append("• ")
+                currentLine = currentLine.substring(2)
+            }
+            
+            var index = 0
+            while (index < currentLine.length) {
+                when {
+                    currentLine.startsWith("**", index) -> {
+                        val endIdx = currentLine.indexOf("**", index + 2)
+                        if (endIdx != -1) {
+                            pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+                            append(currentLine.substring(index + 2, endIdx))
+                            pop()
+                            index = endIdx + 2
+                        } else {
+                            append("**")
+                            index += 2
+                        }
+                    }
+                    currentLine.startsWith("*", index) -> {
+                        val endIdx = currentLine.indexOf("*", index + 1)
+                        if (endIdx != -1) {
+                            pushStyle(androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic))
+                            append(currentLine.substring(index + 1, endIdx))
+                            pop()
+                            index = endIdx + 1
+                        } else {
+                            append("*")
+                            index += 1
+                        }
+                    }
+                    currentLine.startsWith("[", index) -> {
+                        val endTextIdx = currentLine.indexOf("]", index)
+                        val startUrlIdx = currentLine.indexOf("(", endTextIdx)
+                        val endUrlIdx = currentLine.indexOf(")", startUrlIdx)
+                        if (endTextIdx != -1 && startUrlIdx == endTextIdx + 1 && endUrlIdx != -1) {
+                            val linkText = currentLine.substring(index + 1, endTextIdx)
+                            val linkUrl = currentLine.substring(startUrlIdx + 1, endUrlIdx)
+                            
+                            pushStringAnnotation(tag = "URL", annotation = linkUrl)
+                            pushStyle(androidx.compose.ui.text.SpanStyle(
+                                color = Color(0xFF007AFF),
+                                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                            ))
+                            append(linkText)
+                            pop()
+                            pop()
+                            index = endUrlIdx + 1
+                        } else {
+                            append("[")
+                            index += 1
+                        }
+                    }
+                    else -> {
+                        append(currentLine[index])
+                        index += 1
+                    }
+                }
+            }
+            if (lineIdx < parts.size - 1) {
+                append("\n")
+            }
         }
     }
 }
