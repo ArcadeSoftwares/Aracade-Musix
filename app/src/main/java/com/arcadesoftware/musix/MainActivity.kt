@@ -1486,6 +1486,7 @@ fun MainScreen() {
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
         ) {
             var showManageProfile by remember { mutableStateOf(false) }
+            var isSigningIn by remember { mutableStateOf(false) }
             val sharedPrefs = context.getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE)
             var syncPlaylists by remember { mutableStateOf(sharedPrefs.getBoolean("sync_playlists", true)) }
             var syncLibrary by remember { mutableStateOf(sharedPrefs.getBoolean("sync_library", true)) }
@@ -1618,7 +1619,10 @@ fun MainScreen() {
                                 com.arcadesoftware.musix.components.ByeAnimManager.trigger()
                             },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFFFF453A) else Color(0xFFFF3B30),
+                                contentColor = Color.White
+                            )
                         ) {
                             Icon(Icons.Rounded.Logout, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                             Text("Sign Out")
@@ -1639,9 +1643,10 @@ fun MainScreen() {
                         )
 
                         if (currentUser == null) {
-                            Button(
+                            OutlinedButton(
                                 onClick = {
-                                    showAccountSheet = false
+                                    if (isSigningIn) return@OutlinedButton
+                                    isSigningIn = true
                                     scope.launch {
                                         try {
                                             val credentialManager = androidx.credentials.CredentialManager.create(context)
@@ -1664,6 +1669,7 @@ fun MainScreen() {
                                                 val authCredential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
                                                 com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(authCredential)
                                                     .addOnSuccessListener {
+                                                        isSigningIn = false
                                                         showWelcomePopup = true
                                                         scope.launch {
                                                             kotlinx.coroutines.delay(2500)
@@ -1671,34 +1677,41 @@ fun MainScreen() {
                                                         }
                                                     }
                                                     .addOnFailureListener {
+                                                        isSigningIn = false
                                                         android.widget.Toast.makeText(context, "Sign in failed: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
                                                     }
+                                            } else {
+                                                isSigningIn = false
                                             }
                                         } catch (e: Exception) {
+                                            isSigningIn = false
                                             android.widget.Toast.makeText(context, "Google Sign-In failed", android.widget.Toast.LENGTH_SHORT).show()
                                             e.printStackTrace()
                                         }
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color(0xFFF2F2F7),
-                                    contentColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color.Black
-                                ),
-                                shape = RoundedCornerShape(12.dp)
+                                modifier = Modifier.fillMaxWidth().height(56.dp)
                             ) {
-                                Icon(
-                                    painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_google),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = Color.Unspecified
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = "Sign in with Google",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 16.sp
-                                )
+                                if (isSigningIn) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.5.dp,
+                                        color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color.Black
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_google),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = Color.Unspecified
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "Sign in with Google",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 16.sp
+                                    )
+                                }
                             }
                         } else {
                             Row(
