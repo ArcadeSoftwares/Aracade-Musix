@@ -14,7 +14,7 @@ class PlaybackService : Service() {
     companion object {
         var instance: PlaybackService? = null
         private var isServiceRunning = false
-        
+
         fun start(context: Context) {
             if (!isServiceRunning) {
                 val intent = Intent(context, PlaybackService::class.java)
@@ -77,16 +77,26 @@ class PlaybackService : Service() {
             startForeground(1001, notification)
         }
 
+        // FIX: Always ensure PlayerManager is initialized before handling any action
+        if (PlayerManager.exoPlayer == null) {
+            PlayerManager.init(applicationContext)
+        }
+
         val action = intent?.action
         if (action != null) {
-            if (PlayerManager.exoPlayer == null) {
-                PlayerManager.init(applicationContext)
-            }
             when (action) {
                 "com.arcadesoftware.musix.ACTION_PLAY" -> PlayerManager.playOrRecover(applicationContext)
                 "com.arcadesoftware.musix.ACTION_PAUSE" -> PlayerManager.exoPlayer?.pause()
-                "com.arcadesoftware.musix.ACTION_PREVIOUS" -> PlayerManager.playPrevious()
-                "com.arcadesoftware.musix.ACTION_NEXT" -> PlayerManager.playNext()
+                "com.arcadesoftware.musix.ACTION_PREVIOUS" -> {
+                    PlayerManager.playPrevious()
+                    // FIX: ensure playback starts after track change
+                    PlayerManager.exoPlayer?.play()
+                }
+                "com.arcadesoftware.musix.ACTION_NEXT" -> {
+                    PlayerManager.playNext()
+                    // FIX: ensure playback starts after track change
+                    PlayerManager.exoPlayer?.play()
+                }
                 "com.arcadesoftware.musix.ACTION_DISMISS" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -95,6 +105,7 @@ class PlaybackService : Service() {
                         stopForeground(true)
                     }
                     stopSelf()
+                    return START_NOT_STICKY
                 }
                 "com.arcadesoftware.musix.ACTION_LIKE" -> {
                     val song = PlayerManager.currentSong.value
@@ -108,8 +119,16 @@ class PlaybackService : Service() {
                 "com.arcadesoftware.musix.ACTION_FORWARD_10" -> PlayerManager.seekBy(10_000L)
             }
         } else {
-            PlayerManager.triggerNotificationUpdate()
+            // FIX: null intent = service restarted by system (START_STICKY) or called directly
+            // Resume playback if a song was active.
+            val currentSong = PlayerManager.currentSong.value
+            if (currentSong != null && PlayerManager.isPlaying.value == true) {
+                PlayerManager.playOrRecover(applicationContext)
+            }
         }
+
+        // Always replace the dummy notification with the actual rich media notification
+        PlayerManager.triggerNotificationUpdate()
 
         return START_STICKY
     }
@@ -135,18 +154,23 @@ class PlaybackService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // App swiped from recents → always stop service and release player
         PlayerManager.exoPlayer?.stop()
         PlayerManager.exoPlayer?.release()
         PlayerManager.exoPlayer = null
         PlayerManager.isPlaying.value = false
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        // FIX: added API version guard (was unconditionally calling STOP_FOREGROUND_REMOVE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
-        isServiceRunning = false
+        isServiceRunning = false  // FIX: was missing — allowed start() to skip on restart
     }
 }

@@ -117,11 +117,10 @@ object PlayerManager {
             if (wakeLock == null) {
                 val powerManager = appContext?.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
                 wakeLock = powerManager?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Musix:PlaybackWakeLock")
+                wakeLock?.setReferenceCounted(false)
             }
-            if (wakeLock?.isHeld == false) {
-                wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout for safety
-                android.util.Log.d(TAG, "WakeLock acquired")
-            }
+            wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes timeout for safety
+            android.util.Log.d(TAG, "WakeLock acquired")
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Failed to acquire WakeLock", e)
         }
@@ -225,6 +224,10 @@ object PlayerManager {
             // Initialize platform MediaSession
             val session = android.media.session.MediaSession(context, "MusixPlayer").apply {
                 isActive = true
+                setFlags(
+                    android.media.session.MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS or
+                    android.media.session.MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
+                )
                 setCallback(object : android.media.session.MediaSession.Callback() {
                     override fun onPlay() {
                         android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -389,9 +392,12 @@ object PlayerManager {
                             acquireWakeLock()
                             PlaybackService.start(ctx)
                         } else {
+                            acquireWakeLock() // keep wake lock during track transition gap
+                            PlaybackService.start(ctx) // keep service alive between songs
                             val state = exoPlayer?.playbackState
                             if (state != androidx.media3.common.Player.STATE_ENDED &&
-                                state != androidx.media3.common.Player.STATE_BUFFERING) {
+                                state != androidx.media3.common.Player.STATE_BUFFERING &&
+                                state != androidx.media3.common.Player.STATE_IDLE) {
                                 releaseWakeLock()
                             }
                             exoPlayer?.let { player ->
@@ -427,14 +433,20 @@ object PlayerManager {
                                                 playInternal(newQueue[currentIndex + 1])
                                             } else {
                                                 releaseWakeLock()
+                                                exoPlayer?.playWhenReady = false
                                             }
                                         }.onFailure {
                                             releaseWakeLock()
+                                            exoPlayer?.playWhenReady = false
                                         }
                                     }
-                                } ?: releaseWakeLock()
+                                } ?: run {
+                                    releaseWakeLock()
+                                    exoPlayer?.playWhenReady = false
+                                }
                             } else {
                                 releaseWakeLock()
+                                exoPlayer?.playWhenReady = false
                             }
                             "ENDED"
                         }
@@ -448,6 +460,15 @@ object PlayerManager {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     android.util.Log.e(TAG, "ExoPlayer playback error: ${error.message}", error)
                     android.util.Log.e(TAG, "Error code: ${error.errorCodeName} (${error.errorCode})")
+                }
+
+                override fun onPositionDiscontinuity(
+                    oldPosition: androidx.media3.common.Player.PositionInfo,
+                    newPosition: androidx.media3.common.Player.PositionInfo,
+                    reason: Int
+                ) {
+                    currentPosition.value = newPosition.positionMs
+                    updatePlaybackState()
                 }
             })
         }
@@ -736,6 +757,8 @@ object PlayerManager {
             if (resolvedSong == null) {
                 android.util.Log.e(TAG, "Could not resolve a song for item: $item")
                 releaseWakeLock()
+                exoPlayer?.playWhenReady = false
+                android.os.Handler(android.os.Looper.getMainLooper()).post { triggerNotificationUpdate() }
                 return@launch
             }
 
@@ -865,6 +888,8 @@ object PlayerManager {
             } else {
                 android.util.Log.e(TAG, "All clients failed for videoId=$videoId")
                 releaseWakeLock()
+                exoPlayer?.playWhenReady = false
+                android.os.Handler(android.os.Looper.getMainLooper()).post { triggerNotificationUpdate() }
             }
         }
     }
@@ -1028,11 +1053,13 @@ object PlayerManager {
             likeIconRes
         ).build()
 
+        val playbackSpeed = if (player.isPlaying) 1.0f else 0f
         val playbackState = android.media.session.PlaybackState.Builder()
-            .setState(state, position, 1.0f)
+            .setState(state, position, playbackSpeed)
             .setActions(
                 android.media.session.PlaybackState.ACTION_PLAY or
                         android.media.session.PlaybackState.ACTION_PAUSE or
+                        android.media.session.PlaybackState.ACTION_PLAY_PAUSE or
                         android.media.session.PlaybackState.ACTION_SEEK_TO or
                         android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT or
                         android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS or
@@ -1081,7 +1108,7 @@ object PlayerManager {
         }
         session.setMetadata(metadataBuilder.build())
 
-        updatePlaybackState()
+        updatePlaybackState(overridePosition = if (isDifferentSong) 0L else null)
         showOrUpdateNotification()
 
         if (song.thumbnail.isNotEmpty() && (isDifferentSong || currentMetadataBitmap == null)) {
@@ -1148,7 +1175,7 @@ object PlayerManager {
     private fun showOrUpdateNotification(largeIcon: android.graphics.Bitmap? = null) {
         val context = appContext ?: return
         val song = currentSong.value as? SongItem ?: return
-        val isPlayingVal = isPlaying.value
+        val isForegroundRequired = exoPlayer?.playWhenReady ?: isPlaying.value
 
         val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
 
@@ -1217,7 +1244,7 @@ object PlayerManager {
             .setContentIntent(contentIntent)
             .setDeleteIntent(dismissIntent)
             .setVisibility(android.app.Notification.VISIBILITY_PUBLIC)
-            .setOngoing(isPlayingVal)
+            .setOngoing(isForegroundRequired)
 
         val bitmapToUse = largeIcon ?: currentMetadataBitmap
         if (bitmapToUse != null) {
@@ -1237,7 +1264,7 @@ object PlayerManager {
                 android.R.drawable.ic_media_previous, "Previous", prevIntent
             ).build()
         )
-        if (isPlayingVal) {
+        if (isForegroundRequired) {
             builder.addAction(
                 android.app.Notification.Action.Builder(
                     android.R.drawable.ic_media_pause, "Pause", pauseIntent
@@ -1275,7 +1302,7 @@ object PlayerManager {
             ) {
                 val notification = builder.build()
                 com.arcadesoftware.musix.PlaybackService.instance?.let { service ->
-                    service.updateForegroundNotification(notification, isPlayingVal)
+                    service.updateForegroundNotification(notification, isForegroundRequired)
                 } ?: run {
                     notificationManager.notify(1001, notification)
                 }

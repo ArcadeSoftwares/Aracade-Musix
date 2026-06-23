@@ -889,31 +889,34 @@ fun LiquidSlider(
                         val targetVal = valueRange.start + progress * (valueRange.endInclusive - valueRange.start)
                         onValueChange(targetVal)
                         
-                        var pointerId = down.id
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val changes = event.changes
-                            var pointerChange: PointerInputChange? = null
-                            for (i in changes.indices) {
-                                if (changes[i].id == pointerId) {
-                                    pointerChange = changes[i]
+                        try {
+                            var pointerId = down.id
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val changes = event.changes
+                                var pointerChange: PointerInputChange? = null
+                                for (i in changes.indices) {
+                                    if (changes[i].id == pointerId) {
+                                        pointerChange = changes[i]
+                                        break
+                                    }
+                                }
+                                if (pointerChange == null) break
+                                
+                                if (pointerChange.changedToUpIgnoreConsumed()) {
                                     break
+                                } else {
+                                    val currentX = pointerChange.position.x
+                                    val currentRawProgress = (currentX / trackWidth).coerceIn(0f, 1f)
+                                    val currentProgress = if (isLtr) currentRawProgress else 1f - currentRawProgress
+                                    val newVal = valueRange.start + currentProgress * (valueRange.endInclusive - valueRange.start)
+                                    onValueChange(newVal)
+                                    pointerChange.consume()
                                 }
                             }
-                            if (pointerChange == null) break
-                            
-                            if (pointerChange.changedToUpIgnoreConsumed()) {
-                                dampedDragAnimation.release()
-                                onValueChangeFinished?.invoke()
-                                break
-                            } else {
-                                val currentX = pointerChange.position.x
-                                val currentRawProgress = (currentX / trackWidth).coerceIn(0f, 1f)
-                                val currentProgress = if (isLtr) currentRawProgress else 1f - currentRawProgress
-                                val newVal = valueRange.start + currentProgress * (valueRange.endInclusive - valueRange.start)
-                                onValueChange(newVal)
-                                pointerChange.consume()
-                            }
+                        } finally {
+                            dampedDragAnimation.release()
+                            onValueChangeFinished?.invoke()
                         }
                     }
                 },
