@@ -19,8 +19,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+import kotlinx.coroutines.Job
+
 object FirebaseSyncManager {
     private const val TAG = "FirebaseSyncManager"
+    var lastSyncedUid: String? = null
+    private var syncJob: Job? = null
+
+    fun schedulePushAllLocalDataToFirebase(context: Context) {
+        val appContext = context.applicationContext
+        syncJob?.cancel()
+        syncJob = CoroutineScope(Dispatchers.Main).launch {
+            kotlinx.coroutines.delay(5 * 60 * 1000) // 5 minutes delay
+            pushAllLocalDataToFirebase(appContext)
+        }
+    }
 
     private fun getDbRef() = FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
         FirebaseDatabase.getInstance().getReference("com_arcadesoftware_musix").child("user").child(uid)
@@ -33,6 +46,32 @@ object FirebaseSyncManager {
         val songIds = LikedSongsManager.getLikedSongIds(context).toList()
         ref.child("liked_songs").setValue(songIds)
             .addOnFailureListener { Log.e(TAG, "Failed to sync liked songs", it) }
+
+        // Compile and sync metadata for each liked song from database
+        val database = AppDatabase.getDatabase(context)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val historyList = database.musicDao().getPlayHistory().first()
+                val metadata = mutableMapOf<String, Map<String, Any?>>()
+                for (id in songIds) {
+                    val matchingSong = historyList.find { it.id == id }
+                    if (matchingSong != null) {
+                        metadata[id] = mapOf(
+                            "id" to matchingSong.id,
+                            "title" to matchingSong.title,
+                            "artistName" to matchingSong.artistName,
+                            "artistId" to matchingSong.artistId,
+                            "thumbnailUrl" to matchingSong.thumbnailUrl
+                        )
+                    }
+                }
+                if (metadata.isNotEmpty()) {
+                    ref.child("liked_songs_metadata").setValue(metadata)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync liked songs metadata", e)
+            }
+        }
     }
 
     fun syncLikedArtists(context: Context) {
@@ -150,6 +189,8 @@ object FirebaseSyncManager {
     }
 
     fun pushAllLocalDataToFirebase(context: Context) {
+        syncUserDetails(context)
+        syncSettings(context)
         syncLikedSongs(context)
         syncLikedArtists(context)
         syncLikedPlaylists(context)
@@ -164,12 +205,49 @@ object FirebaseSyncManager {
             override fun onDataChange(snapshot: DataSnapshot) {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // 0. Settings Sync
+                        val settingsSnap = snapshot.child("settings")
+                        if (settingsSnap.exists()) {
+                            val syncPlaylists = settingsSnap.child("sync_playlists").value as? Boolean ?: true
+                            val syncLibrary = settingsSnap.child("sync_library").value as? Boolean ?: true
+                            val syncHistory = settingsSnap.child("sync_history").value as? Boolean ?: true
+                            val resumePlayback = settingsSnap.child("resume_playback").value as? Boolean ?: true
+                            val alwaysShuffle = settingsSnap.child("always_shuffle").value as? Boolean ?: false
+                            val autoDownloadPlaylists = settingsSnap.child("auto_download_playlists").value as? Boolean ?: false
+                            val wifiOnlyDownload = settingsSnap.child("wifi_only_download").value as? Boolean ?: false
+                            context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("sync_playlists", syncPlaylists)
+                                .putBoolean("sync_library", syncLibrary)
+                                .putBoolean("sync_history", syncHistory)
+                                .putBoolean("resume_playback", resumePlayback)
+                                .putBoolean("always_shuffle", alwaysShuffle)
+                                .putBoolean("auto_download_playlists", autoDownloadPlaylists)
+                                .putBoolean("wifi_only_download", wifiOnlyDownload)
+                                .apply()
+                        }
+
                         // 1. Liked Songs
                         val likedSongsSnap = snapshot.child("liked_songs")
                         if (likedSongsSnap.exists()) {
                             val remoteIds = likedSongsSnap.children.mapNotNull { it.value as? String }.toSet()
                             val localIds = LikedSongsManager.getLikedSongIds(context)
                             LikedSongsManager.saveLikedSongIds(context, localIds + remoteIds)
+                        }
+
+                        val likedSongsMetadataSnap = snapshot.child("liked_songs_metadata")
+                        if (likedSongsMetadataSnap.exists()) {
+                            val database = AppDatabase.getDatabase(context)
+                            likedSongsMetadataSnap.children.forEach { child ->
+                                val id = child.child("id").value as? String ?: return@forEach
+                                val title = child.child("title").value as? String ?: return@forEach
+                                val artistName = child.child("artistName").value as? String ?: return@forEach
+                                val artistId = child.child("artistId").value as? String
+                                val thumbnailUrl = child.child("thumbnailUrl").value as? String ?: return@forEach
+                                database.musicDao().insertPlayHistory(
+                                    PlayHistoryEntity(id, title, artistName, artistId, thumbnailUrl, System.currentTimeMillis())
+                                )
+                            }
                         }
 
                         // 2. Liked Artists
@@ -369,6 +447,201 @@ object FirebaseSyncManager {
                 ArtistItem(id, title, thumbnail, channelId, null, null, null)
             }
             else -> null
+        }
+    }
+
+    fun syncUserDetails(context: Context) {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        val ref = getDbRef() ?: return
+        val details = mapOf(
+            "displayName" to (user.displayName ?: ""),
+            "email" to (user.email ?: ""),
+            "photoUrl" to (user.photoUrl?.toString() ?: ""),
+            "uid" to user.uid
+        )
+        ref.child("details").setValue(details)
+            .addOnFailureListener { Log.e(TAG, "Failed to sync user details", it) }
+    }
+
+    fun syncSettings(context: Context) {
+        val ref = getDbRef() ?: return
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        val settings = mapOf(
+            "sync_playlists" to sharedPrefs.getBoolean("sync_playlists", true),
+            "sync_library" to sharedPrefs.getBoolean("sync_library", true),
+            "sync_history" to sharedPrefs.getBoolean("sync_history", true),
+            "resume_playback" to sharedPrefs.getBoolean("resume_playback", true),
+            "always_shuffle" to sharedPrefs.getBoolean("always_shuffle", false),
+            "auto_download_playlists" to sharedPrefs.getBoolean("auto_download_playlists", false),
+            "wifi_only_download" to sharedPrefs.getBoolean("wifi_only_download", false)
+        )
+        ref.child("settings").setValue(settings)
+            .addOnFailureListener { Log.e(TAG, "Failed to sync settings", it) }
+    }
+
+    fun pushAllLocalDataToFirebaseImmediately(context: Context, onComplete: () -> Unit) {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            onComplete()
+            return
+        }
+        val ref = getDbRef()
+        if (ref == null) {
+            onComplete()
+            return
+        }
+
+        // Cancel any pending debounced sync
+        syncJob?.cancel()
+
+        var remainingTasks = 9
+        var finished = false
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            if (!finished) {
+                finished = true
+                Log.d(TAG, "Sync immediately timed out, proceeding with callback")
+                onComplete()
+            }
+        }
+        handler.postDelayed(timeoutRunnable, 5000)
+
+        fun checkComplete() {
+            remainingTasks--
+            if (remainingTasks <= 0 && !finished) {
+                finished = true
+                handler.removeCallbacks(timeoutRunnable)
+                Log.d(TAG, "Sync immediately finished successfully, proceeding with callback")
+                onComplete()
+            }
+        }
+
+        // 1. Details
+        val details = mapOf(
+            "displayName" to (user.displayName ?: ""),
+            "email" to (user.email ?: ""),
+            "photoUrl" to (user.photoUrl?.toString() ?: ""),
+            "uid" to user.uid
+        )
+        ref.child("details").setValue(details).addOnCompleteListener { checkComplete() }
+
+        // 2. Settings
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        val settings = mapOf(
+            "sync_playlists" to sharedPrefs.getBoolean("sync_playlists", true),
+            "sync_library" to sharedPrefs.getBoolean("sync_library", true),
+            "sync_history" to sharedPrefs.getBoolean("sync_history", true),
+            "resume_playback" to sharedPrefs.getBoolean("resume_playback", true),
+            "always_shuffle" to sharedPrefs.getBoolean("always_shuffle", false),
+            "auto_download_playlists" to sharedPrefs.getBoolean("auto_download_playlists", false),
+            "wifi_only_download" to sharedPrefs.getBoolean("wifi_only_download", false)
+        )
+        ref.child("settings").setValue(settings).addOnCompleteListener { checkComplete() }
+
+        // 3. Liked Songs
+        val songIds = LikedSongsManager.getLikedSongIds(context).toList()
+        ref.child("liked_songs").setValue(songIds).addOnCompleteListener { checkComplete() }
+
+        // 4. Liked Artists
+        val artists = LikedArtistsManager.getLikedArtists(context).map {
+            mapOf("id" to it.id, "name" to it.name, "thumbnailUrl" to it.thumbnailUrl)
+        }
+        ref.child("liked_artists").setValue(artists).addOnCompleteListener { checkComplete() }
+
+        // 5. Liked Playlists
+        val playlists = LikedPlaylistsManager.getLikedPlaylists(context).map {
+            mapOf("id" to it.id, "title" to it.title, "thumbnail" to it.thumbnail, "type" to it.type, "subtitle" to it.subtitle)
+        }
+        ref.child("liked_playlists").setValue(playlists).addOnCompleteListener { checkComplete() }
+
+        // 6. History
+        val database = AppDatabase.getDatabase(context)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val history = database.musicDao().getPlayHistory().first().map {
+                    mapOf("id" to it.id, "title" to it.title, "artistName" to it.artistName, "artistId" to it.artistId, "thumbnailUrl" to it.thumbnailUrl, "timestamp" to it.timestamp)
+                }
+                ref.child("history").setValue(history).addOnCompleteListener { checkComplete() }
+            } catch (e: Exception) {
+                checkComplete()
+            }
+        }
+
+        // 7. Recommendations
+        val recs = HomeCacheManager.load(context).second
+        val serializedRecs = recs.map { rec ->
+            mapOf(
+                "seed" to mapOf("id" to rec.seed.id, "title" to rec.seed.title, "artistName" to rec.seed.artistName, "artistId" to rec.seed.artistId, "thumbnailUrl" to rec.seed.thumbnailUrl, "timestamp" to rec.seed.timestamp),
+                "items" to rec.items.map { item -> item.toMap() }
+            )
+        }
+        ref.child("recommendations").setValue(serializedRecs).addOnCompleteListener { checkComplete() }
+
+        // 8. Playlists
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val playlistsList = database.musicDao().getPlaylists().first()
+                val playlistData = playlistsList.map { pl ->
+                    val songs = database.musicDao().getSongsForPlaylist(pl.id).first().map { song ->
+                        mapOf("songId" to song.id, "songMetadata" to mapOf("id" to song.id, "title" to song.title, "artistName" to song.artistName, "artistId" to song.artistId, "thumbnailUrl" to song.thumbnailUrl))
+                    }
+                    mapOf("id" to pl.id, "name" to pl.name, "coverUri" to pl.coverUri, "createdAt" to pl.createdAt, "songs" to songs)
+                }
+                ref.child("playlists").setValue(playlistData).addOnCompleteListener { checkComplete() }
+            } catch (e: Exception) {
+                checkComplete()
+            }
+        }
+
+        // 9. Liked Songs Metadata
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val historyList = database.musicDao().getPlayHistory().first()
+                val metadata = mutableMapOf<String, Map<String, Any?>>()
+                for (id in songIds) {
+                    val matchingSong = historyList.find { it.id == id }
+                    if (matchingSong != null) {
+                        metadata[id] = mapOf(
+                            "id" to matchingSong.id,
+                            "title" to matchingSong.title,
+                            "artistName" to matchingSong.artistName,
+                            "artistId" to matchingSong.artistId,
+                            "thumbnailUrl" to matchingSong.thumbnailUrl
+                        )
+                    }
+                }
+                if (metadata.isNotEmpty()) {
+                    ref.child("liked_songs_metadata").setValue(metadata).addOnCompleteListener { checkComplete() }
+                } else {
+                    checkComplete()
+                }
+            } catch (e: Exception) {
+                checkComplete()
+            }
+        }
+    }
+
+    fun clearAllLocalData(context: Context) {
+        // 1. Clear SharedPreferences
+        val prefsToClear = listOf(
+            "liked_songs_prefs",
+            "liked_artists_prefs",
+            "liked_playlists_prefs",
+            "downloaded_playlists_prefs",
+            "musix_profile_settings"
+        )
+        for (pref in prefsToClear) {
+            context.getSharedPreferences(pref, Context.MODE_PRIVATE).edit().clear().apply()
+        }
+
+        // 2. Clear Database (Room)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                AppDatabase.getDatabase(context).clearAllTables()
+                Log.d(TAG, "Local Room database cleared successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear local Room database", e)
+            }
         }
     }
 }
