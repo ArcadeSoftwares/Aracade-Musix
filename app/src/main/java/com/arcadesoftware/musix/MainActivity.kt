@@ -1378,11 +1378,54 @@ fun MainScreen() {
         android.util.Log.d("MainScreen", "POST_NOTIFICATIONS permission granted: $isGranted")
     }
 
+    var showForceUpdateDialog by remember { mutableStateOf(false) }
+    var showSoftUpdateDialog by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf("") }
+    var updateUrl by remember { mutableStateOf("") }
+
     LaunchedEffect(Unit) {
         PlayerManager.init(context.applicationContext)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
+        
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            val currentAppVersionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toInt()
+            } else {
+                packageInfo.versionCode
+            }
+            
+            val vcRef = com.google.firebase.database.FirebaseDatabase.getInstance()
+                .getReference("com_arcadesoftware_musix")
+                .child("version_control")
+            vcRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
+                override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                    if (snapshot.exists()) {
+                        val minSupported = (snapshot.child("min_supported_version_code").value as? Number)?.toInt() ?: 0
+                        val currentVersion = (snapshot.child("current_version_code").value as? Number)?.toInt() ?: 0
+                        val url = snapshot.child("update_path_url").value as? String ?: ""
+                        val msg = snapshot.child("update_message").value as? String ?: "Please update to the latest version."
+                        
+                        updateUrl = url
+                        updateMessage = msg
+                        
+                        if (currentAppVersionCode < minSupported) {
+                            showForceUpdateDialog = true
+                        } else if (currentAppVersionCode < currentVersion) {
+                            showSoftUpdateDialog = true
+                        }
+                    }
+                }
+                override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                    android.util.Log.e("VersionControl", "Failed to check version control", error.toException())
+                }
+            })
+        } catch (e: Exception) {
+            android.util.Log.e("VersionControl", "Failed to resolve version code", e)
+        }
+
         MusixUpdater.checkForUpdate(
             context = context,
             onUpdateFound = { version, description, apkUrl ->
@@ -1853,6 +1896,199 @@ fun MainScreen() {
                             shape = androidx.compose.ui.graphics.RectangleShape
                         ) {
                             Text("Sign In Now", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. Force Update Dialog (Non-dismissible)
+        if (showForceUpdateDialog) {
+            androidx.activity.compose.BackHandler(enabled = true) {
+                // Intercept back presses so user cannot close it
+            }
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showForceUpdateDialog,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.8f),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.8f),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            val isLight = !androidx.compose.foundation.isSystemInDarkTheme()
+            val popupAlpha = if (isLight) 0.5f else 0.4f
+            val containerColor = if (isLight) Color.White.copy(alpha = popupAlpha) else Color.Black.copy(alpha = popupAlpha)
+            val popupShape = RoundedCornerShape(14.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(270.dp)
+                        .drawBackdrop(
+                            backdrop = mainBackdrop,
+                            shape = { popupShape },
+                            effects = {
+                                vibrancy()
+                                blur(16f.dp.toPx())
+                                lens(12f.dp.toPx(), 24f.dp.toPx())
+                            },
+                            onDrawSurface = {
+                                drawRect(containerColor)
+                            }
+                        )
+                        .border(
+                            width = 0.5.dp,
+                            color = if (isLight) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.15f),
+                            shape = popupShape
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ErrorOutline,
+                            contentDescription = null,
+                            tint = Color(0xFFFA243C),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Update Required",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = if (isLight) Color.Black else Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = updateMessage,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            color = if (isLight) Color.DarkGray else Color.LightGray
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 0.5.dp)
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            if (updateUrl.isNotEmpty()) {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(updateUrl))
+                                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = androidx.compose.ui.graphics.RectangleShape
+                    ) {
+                        Text("Update Now", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
+                    }
+                }
+            }
+        }
+
+        // 2. Soft Update Dialog (Dismissible)
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showSoftUpdateDialog,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.8f),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.8f),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            val isLight = !androidx.compose.foundation.isSystemInDarkTheme()
+            val popupAlpha = if (isLight) 0.5f else 0.4f
+            val containerColor = if (isLight) Color.White.copy(alpha = popupAlpha) else Color.Black.copy(alpha = popupAlpha)
+            val popupShape = RoundedCornerShape(14.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { showSoftUpdateDialog = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(270.dp)
+                        .drawBackdrop(
+                            backdrop = mainBackdrop,
+                            shape = { popupShape },
+                            effects = {
+                                vibrancy()
+                                blur(16f.dp.toPx())
+                                lens(12f.dp.toPx(), 24f.dp.toPx())
+                            },
+                            onDrawSurface = {
+                                drawRect(containerColor)
+                            }
+                        )
+                        .border(
+                            width = 0.5.dp,
+                            color = if (isLight) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.15f),
+                            shape = popupShape
+                        )
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) {},
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = Color(0xFF007AFF),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Update Available",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = if (isLight) Color.Black else Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = updateMessage,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            color = if (isLight) Color.DarkGray else Color.LightGray
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 0.5.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showSoftUpdateDialog = false },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = androidx.compose.ui.graphics.RectangleShape
+                        ) {
+                            Text("Later", fontSize = 15.sp, color = Color(0xFF007AFF))
+                        }
+                        Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color.Gray.copy(alpha = 0.3f)))
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                showSoftUpdateDialog = false
+                                if (updateUrl.isNotEmpty()) {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(updateUrl))
+                                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(intent)
+                                }
+                            },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = androidx.compose.ui.graphics.RectangleShape
+                        ) {
+                            Text("Update Now", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
                         }
                     }
                 }
