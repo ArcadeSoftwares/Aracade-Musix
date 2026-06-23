@@ -1382,6 +1382,7 @@ fun MainScreen() {
     var showForceUpdateDialog by remember { mutableStateOf(false) }
     var showSoftUpdateDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
+    var blockedInfoMessage by remember { mutableStateOf("") }
     var updateUrl by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -1409,9 +1410,11 @@ fun MainScreen() {
                         val currentVersion = (snapshot.child("current_version_code").value as? Number)?.toInt() ?: 0
                         val url = snapshot.child("update_path_url").value as? String ?: ""
                         val msg = snapshot.child("update_message").value as? String ?: "Please update to the latest version."
+                        val blockMsg = snapshot.child("blocked_info_message").value as? String ?: "This service is temporarily undergoing maintenance. Please check back later."
                         
                         updateUrl = url
                         updateMessage = msg
+                        blockedInfoMessage = blockMsg
                         
                         if (blockAllAccess) {
                             showBlockAllAccessDialog = true
@@ -1971,7 +1974,7 @@ fun MainScreen() {
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-                        val rawMsg = if (updateMessage.isNotEmpty()) updateMessage else "This service is temporarily undergoing maintenance. Please check back later."
+                        val rawMsg = if (blockedInfoMessage.isNotEmpty()) blockedInfoMessage else "This service is temporarily undergoing maintenance. Please check back later."
                         val annotatedText = parseMarkdown(rawMsg)
                         androidx.compose.foundation.text.ClickableText(
                             text = annotatedText,
@@ -2061,11 +2064,26 @@ fun MainScreen() {
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = updateMessage,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            color = if (isLight) Color.DarkGray else Color.LightGray
+                        val annotatedText = parseMarkdown(updateMessage)
+                        androidx.compose.foundation.text.ClickableText(
+                            text = annotatedText,
+                            onClick = { offset ->
+                                annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                    .firstOrNull()?.let { annotation ->
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(annotation.item))
+                                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                    }
+                            },
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                color = if (isLight) Color.DarkGray else Color.LightGray
+                            )
                         )
                     }
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 0.5.dp)
@@ -2152,11 +2170,26 @@ fun MainScreen() {
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = updateMessage,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            color = if (isLight) Color.DarkGray else Color.LightGray
+                        val annotatedText = parseMarkdown(updateMessage)
+                        androidx.compose.foundation.text.ClickableText(
+                            text = annotatedText,
+                            onClick = { offset ->
+                                annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                    .firstOrNull()?.let { annotation ->
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(annotation.item))
+                                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                    }
+                            },
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                color = if (isLight) Color.DarkGray else Color.LightGray
+                            )
                         )
                     }
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 0.5.dp)
