@@ -57,6 +57,7 @@ import android.net.NetworkCapabilities
 import androidx.annotation.OptIn
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.text.style.TextOverflow
@@ -1478,133 +1479,267 @@ fun MainScreen() {
             onDismissRequest = { showAccountSheet = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Account",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+            var showManageProfile by remember { mutableStateOf(false) }
+            val sharedPrefs = context.getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE)
+            var syncPlaylists by remember { mutableStateOf(sharedPrefs.getBoolean("sync_playlists", true)) }
+            var syncLibrary by remember { mutableStateOf(sharedPrefs.getBoolean("sync_library", true)) }
+            var syncHistory by remember { mutableStateOf(sharedPrefs.getBoolean("sync_history", true)) }
 
-                if (currentUser == null) {
-                    Button(
+            if (showManageProfile) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { showManageProfile = false }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Manage Profile",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    val isLightMode = !androidx.compose.foundation.isSystemInDarkTheme()
+                    val cardBg = if (isLightMode) Color(0xFFF2F2F7) else Color(0xFF1C1C1E)
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(cardBg)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "CLOUD SYNC FEATURES",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isLightMode) Color.Gray else Color.LightGray,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Sync Playlists", fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                                Text("Sync custom playlists with Firebase cloud storage", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            com.arcadesoftware.musix.components.LiquidToggle(
+                                selected = { syncPlaylists },
+                                onSelect = { enabled ->
+                                    syncPlaylists = enabled
+                                    sharedPrefs.edit().putBoolean("sync_playlists", enabled).apply()
+                                    com.arcadesoftware.musix.db.FirebaseSyncManager.pushAllLocalDataToFirebase(context)
+                                },
+                                backdrop = mainBackdrop
+                            )
+                        }
+
+                        androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Sync Liked Songs & Library", fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                                Text("Keep liked items and library sync across devices", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            com.arcadesoftware.musix.components.LiquidToggle(
+                                selected = { syncLibrary },
+                                onSelect = { enabled ->
+                                    syncLibrary = enabled
+                                    sharedPrefs.edit().putBoolean("sync_library", enabled).apply()
+                                    com.arcadesoftware.musix.db.FirebaseSyncManager.pushAllLocalDataToFirebase(context)
+                                },
+                                backdrop = mainBackdrop
+                            )
+                        }
+
+                        androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Sync History & Recommendation", fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                                Text("Sync history details and homepage recommendations", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            com.arcadesoftware.musix.components.LiquidToggle(
+                                selected = { syncHistory },
+                                onSelect = { enabled ->
+                                    syncHistory = enabled
+                                    sharedPrefs.edit().putBoolean("sync_history", enabled).apply()
+                                    com.arcadesoftware.musix.db.FirebaseSyncManager.pushAllLocalDataToFirebase(context)
+                                },
+                                backdrop = mainBackdrop
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(48.dp))
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Account",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    if (currentUser == null) {
+                        Button(
+                            onClick = {
+                                showAccountSheet = false
+                                scope.launch {
+                                    try {
+                                        val credentialManager = androidx.credentials.CredentialManager.create(context)
+                                        val request = androidx.credentials.GetCredentialRequest.Builder()
+                                            .addCredentialOption(
+                                                com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
+                                                    .setFilterByAuthorizedAccounts(false)
+                                                    .setServerClientId("983178184530-c0grj95ua7kb862qnr0f9nnhr2g3t5qt.apps.googleusercontent.com")
+                                                    .setAutoSelectEnabled(false)
+                                                    .build()
+                                            )
+                                            .build()
+                                        val result = credentialManager.getCredential(context, request)
+                                        val credential = result.credential
+                                        if (credential is androidx.credentials.CustomCredential &&
+                                            credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                                        ) {
+                                            val googleIdTokenCredential = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
+                                            val idToken = googleIdTokenCredential.idToken
+                                            val authCredential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                                            com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(authCredential)
+                                                .addOnSuccessListener {
+                                                    showWelcomePopup = true
+                                                    scope.launch {
+                                                        kotlinx.coroutines.delay(2500)
+                                                        showWelcomePopup = false
+                                                    }
+                                                }
+                                                .addOnFailureListener {
+                                                    android.widget.Toast.makeText(context, "Sign in failed: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Google Sign-In failed", android.widget.Toast.LENGTH_SHORT).show()
+                                        e.printStackTrace()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color(0xFFF2F2F7),
+                                contentColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color.Black
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_google),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = Color.Unspecified
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Sign in with Google",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showManageProfile = true }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                            val rotation by infiniteTransition.animateFloat(
+                                initialValue = 0f, targetValue = 360f,
+                                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                                    animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
+                                    repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                                )
+                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .graphicsLayer { rotationZ = rotation }
+                                        .border(
+                                            2.dp,
+                                            androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
+                                            androidx.compose.foundation.shape.CircleShape
+                                        )
+                                )
+                                AsyncImage(
+                                    model = currentUser?.photoUrl,
+                                    contentDescription = "Profile Picture",
+                                    modifier = Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(currentUser?.displayName ?: "User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(currentUser?.email ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = "Manage Profile",
+                                tint = Color.Gray
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                showAccountSheet = false
+                                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+                                com.arcadesoftware.musix.components.ByeAnimManager.trigger()
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Rounded.Logout, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Sign Out")
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
                         onClick = {
                             showAccountSheet = false
-                            scope.launch {
-                                try {
-                                    val credentialManager = androidx.credentials.CredentialManager.create(context)
-                                    val request = androidx.credentials.GetCredentialRequest.Builder()
-                                        .addCredentialOption(
-                                            com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
-                                                .setFilterByAuthorizedAccounts(false)
-                                                .setServerClientId("983178184530-c0grj95ua7kb862qnr0f9nnhr2g3t5qt.apps.googleusercontent.com")
-                                                .setAutoSelectEnabled(false)
-                                                .build()
-                                        )
-                                        .build()
-                                    val result = credentialManager.getCredential(context, request)
-                                    val credential = result.credential
-                                    if (credential is androidx.credentials.CustomCredential &&
-                                        credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                                    ) {
-                                        val googleIdTokenCredential = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
-                                        val idToken = googleIdTokenCredential.idToken
-                                        val authCredential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
-                                        com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(authCredential)
-                                            .addOnSuccessListener {
-                                                showWelcomePopup = true
-                                                scope.launch {
-                                                    kotlinx.coroutines.delay(2500)
-                                                    showWelcomePopup = false
-                                                }
-                                            }
-                                            .addOnFailureListener {
-                                                android.widget.Toast.makeText(context, "Sign in failed: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
-                                            }
-                                    }
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(context, "Google Sign-In failed", android.widget.Toast.LENGTH_SHORT).show()
-                                    e.printStackTrace()
-                                }
-                            }
+                            context.startActivity(android.content.Intent(context, SettingsActivity::class.java))
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
-                        Icon(
-                            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_google),
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = Color.Unspecified
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sign in with Google")
+                        Icon(Icons.Rounded.Settings, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                        Text("Settings")
                     }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
-                        val rotation by infiniteTransition.animateFloat(
-                            initialValue = 0f, targetValue = 360f,
-                            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                                animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
-                                repeatMode = androidx.compose.animation.core.RepeatMode.Restart
-                            )
-                        )
-                        Box(contentAlignment = Alignment.Center) {
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .graphicsLayer { rotationZ = rotation }
-                                    .border(
-                                        2.dp,
-                                        androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
-                                        androidx.compose.foundation.shape.CircleShape
-                                    )
-                            )
-                            AsyncImage(
-                                model = currentUser?.photoUrl,
-                                contentDescription = "Profile Picture",
-                                modifier = Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(currentUser?.displayName ?: "User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(currentUser?.email ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            showAccountSheet = false
-                            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
-                            com.arcadesoftware.musix.components.ByeAnimManager.trigger()
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(Icons.Rounded.Logout, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                        Text("Sign Out")
-                    }
+                    Spacer(modifier = Modifier.height(48.dp))
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = {
-                        showAccountSheet = false
-                        context.startActivity(android.content.Intent(context, SettingsActivity::class.java))
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
-                    Icon(Icons.Rounded.Settings, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Settings")
-                }
-                Spacer(modifier = Modifier.height(48.dp))
             }
         }
     }

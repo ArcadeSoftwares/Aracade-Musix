@@ -27,6 +27,8 @@ object FirebaseSyncManager {
     }
 
     fun syncLikedSongs(context: Context) {
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("sync_library", true)) return
         val ref = getDbRef() ?: return
         val songIds = LikedSongsManager.getLikedSongIds(context).toList()
         ref.child("liked_songs").setValue(songIds)
@@ -34,6 +36,8 @@ object FirebaseSyncManager {
     }
 
     fun syncLikedArtists(context: Context) {
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("sync_library", true)) return
         val ref = getDbRef() ?: return
         val artists = LikedArtistsManager.getLikedArtists(context).map {
             mapOf(
@@ -47,6 +51,8 @@ object FirebaseSyncManager {
     }
 
     fun syncLikedPlaylists(context: Context) {
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("sync_library", true)) return
         val ref = getDbRef() ?: return
         val playlists = LikedPlaylistsManager.getLikedPlaylists(context).map {
             mapOf(
@@ -62,6 +68,8 @@ object FirebaseSyncManager {
     }
 
     fun syncHistory(context: Context) {
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("sync_history", true)) return
         val ref = getDbRef() ?: return
         val database = AppDatabase.getDatabase(context)
         CoroutineScope(Dispatchers.IO).launch {
@@ -84,6 +92,8 @@ object FirebaseSyncManager {
     }
 
     fun syncRecommendations(context: Context) {
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("sync_history", true)) return
         val ref = getDbRef() ?: return
         val recs = HomeCacheManager.load(context).second
         val serializedRecs = recs.map { rec ->
@@ -104,6 +114,8 @@ object FirebaseSyncManager {
     }
 
     fun syncPlaylists(context: Context) {
+        val sharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("sync_playlists", true)) return
         val ref = getDbRef() ?: return
         val database = AppDatabase.getDatabase(context)
         CoroutineScope(Dispatchers.IO).launch {
