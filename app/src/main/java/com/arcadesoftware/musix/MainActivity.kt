@@ -1992,9 +1992,11 @@ fun MainScreen() {
                             },
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                                lineHeight = 18.sp,
                                 color = if (isLight) Color.DarkGray else Color.LightGray
-                            )
+                            ),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                         )
                     }
                 }
@@ -2081,9 +2083,11 @@ fun MainScreen() {
                             },
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                                lineHeight = 18.sp,
                                 color = if (isLight) Color.DarkGray else Color.LightGray
-                            )
+                            ),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                         )
                     }
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 0.5.dp)
@@ -2187,9 +2191,11 @@ fun MainScreen() {
                             },
                             style = androidx.compose.ui.text.TextStyle(
                                 fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                                lineHeight = 18.sp,
                                 color = if (isLight) Color.DarkGray else Color.LightGray
-                            )
+                            ),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                         )
                     }
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 0.5.dp)
