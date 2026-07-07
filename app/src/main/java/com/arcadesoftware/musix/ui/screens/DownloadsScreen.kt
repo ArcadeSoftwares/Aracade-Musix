@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
 import coil.compose.AsyncImage
 import com.arcadesoftware.musix.PlayerManager
 import com.arcadesoftware.musix.db.AppDatabase
@@ -35,7 +37,7 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
 }
 
 @Composable
-fun DownloadsScreen(viewModel: DownloadsViewModel = viewModel()) {
+fun DownloadsScreen(viewModel: DownloadsViewModel = viewModel(), onBackClick: (() -> Unit)? = null) {
     val downloadedSongs by viewModel.downloadedSongs.collectAsState()
 
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
@@ -45,12 +47,21 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text(
-                text = "Downloads",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onBackClick != null) {
+                    IconButton(onClick = onBackClick, modifier = Modifier.padding(end = 8.dp)) {
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                }
+                Text(
+                    text = "Downloads",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         
         if (downloadedSongs.isEmpty()) {

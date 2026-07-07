@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -268,7 +269,8 @@ fun Modifier.shimmerEffect(): Modifier = composed {
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
-    onOpenDrawer: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
+    onOpenDownloads: () -> Unit = {}
 ) {
     val homePage by viewModel.homePage.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -308,39 +310,50 @@ fun HomeScreen(
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    IconButton(onClick = onOpenDrawer) {
-                        if (currentUser != null && currentUser?.photoUrl != null) {
-                            val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
-                            val rotation by infiniteTransition.animateFloat(
-                                initialValue = 0f, targetValue = 360f,
-                                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                                    animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
-                                    repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onOpenDrawer) {
+                            if (currentUser != null && currentUser?.photoUrl != null) {
+                                val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                                val rotation by infiniteTransition.animateFloat(
+                                    initialValue = 0f, targetValue = 360f,
+                                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                                        animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
+                                        repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                                    )
                                 )
-                            )
-                            Box(contentAlignment = Alignment.Center) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .graphicsLayer { rotationZ = rotation }
-                                        .border(
-                                            2.dp,
-                                            androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
-                                            androidx.compose.foundation.shape.CircleShape
-                                        )
-                                )
-                                AsyncImage(
-                                    model = currentUser?.photoUrl,
+                                Box(contentAlignment = Alignment.Center) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .graphicsLayer { rotationZ = rotation }
+                                            .border(
+                                                2.dp,
+                                                androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
+                                                androidx.compose.foundation.shape.CircleShape
+                                            )
+                                    )
+                                    AsyncImage(
+                                        model = currentUser?.photoUrl,
+                                        contentDescription = "Profile",
+                                        modifier = Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.AccountCircle,
                                     contentDescription = "Profile",
-                                    modifier = Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape),
-                                    contentScale = ContentScale.Crop
+                                    modifier = Modifier.size(36.dp)
                                 )
                             }
-                        } else {
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(onClick = onOpenDownloads) {
                             Icon(
-                                imageVector = Icons.Rounded.AccountCircle,
-                                contentDescription = "Profile",
-                                modifier = Modifier.size(36.dp)
+                                imageVector = Icons.Rounded.Download,
+                                contentDescription = "Downloads Center",
+                                modifier = Modifier.size(28.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }

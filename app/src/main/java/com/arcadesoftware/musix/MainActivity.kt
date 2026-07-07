@@ -238,22 +238,10 @@ object PlayerManager {
                     seekOnPreparePosition = lastSongPosition
                 }
             } else if (lastSongId != null && !shouldResume) {
-                // If resume_playback is false, restore song details for UI but set position to 0L
-                val lastSongTitle = prefs.getString("last_song_title", "Unknown Title") ?: "Unknown Title"
-                val lastSongArtist = prefs.getString("last_song_artist", "Unknown Artist") ?: "Unknown Artist"
-                val lastSongThumbnail = prefs.getString("last_song_thumbnail", "") ?: ""
-                val lastSongDuration = prefs.getLong("last_song_duration", 0L)
-
-                val song = SongItem(
-                    id = lastSongId,
-                    title = lastSongTitle,
-                    artists = listOf(Artist(lastSongArtist, null)),
-                    thumbnail = lastSongThumbnail,
-                    duration = (lastSongDuration / 1000).toInt()
-                )
-                currentSong.value = song
+                // If resume_playback is false, forget the playing song entirely on startup
+                currentSong.value = null
                 currentPosition.value = 0L
-                currentDuration.value = lastSongDuration
+                currentDuration.value = 0L
                 restoredSongId = null
                 seekOnPreparePosition = null
             }
@@ -802,18 +790,22 @@ object PlayerManager {
 
             // Save to play history
             appContext?.let { ctx ->
-                scope.launch {
-                    val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(ctx)
-                    db.musicDao().insertPlayHistory(
-                        com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
-                            id = resolvedSong.id,
-                            title = resolvedSong.title,
-                            artistName = resolvedSong.artists.firstOrNull()?.name ?: "Unknown",
-                            artistId = resolvedSong.artists.firstOrNull()?.id,
-                            thumbnailUrl = resolvedSong.thumbnail
+                val syncSharedPrefs = ctx.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+                val historyEnabled = syncSharedPrefs.getBoolean("enable_playback_history", true)
+                if (historyEnabled) {
+                    scope.launch {
+                        val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(ctx)
+                        db.musicDao().insertPlayHistory(
+                            com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                                id = resolvedSong.id,
+                                title = resolvedSong.title,
+                                artistName = resolvedSong.artists.firstOrNull()?.name ?: "Unknown",
+                                artistId = resolvedSong.artists.firstOrNull()?.id,
+                                thumbnailUrl = resolvedSong.thumbnail
+                            )
                         )
-                    )
-                    com.arcadesoftware.musix.db.FirestoreSyncManager.syncHistory(ctx)
+                        com.arcadesoftware.musix.db.FirestoreSyncManager.syncHistory(ctx)
+                    }
                 }
             }
 
@@ -1599,6 +1591,7 @@ fun MainScreen() {
     }
 
     var showAccountSheet by remember { mutableStateOf(false) }
+    var showDownloadsScreen by remember { mutableStateOf(false) }
     var currentUser by remember { mutableStateOf(com.google.firebase.auth.FirebaseAuth.getInstance().currentUser) }
     var showWelcomePopup by remember { mutableStateOf(false) }
     var showCloudSyncPrompt by remember { mutableStateOf(false) }
@@ -2363,6 +2356,16 @@ fun MainScreen() {
                                     com.arcadesoftware.musix.db.FirestoreSyncManager.syncSettings(context)
                                 })
                             }
+                            androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                            var enableHistory by remember { mutableStateOf(syncSharedPrefs.getBoolean("enable_playback_history", true)) }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Track Song Playback History", fontWeight = FontWeight.Medium)
+                                com.arcadesoftware.musix.components.LiquidToggle(selected = { enableHistory }, backdrop = mainBackdrop, onSelect = {
+                                    enableHistory = it
+                                    syncSharedPrefs.edit().putBoolean("enable_playback_history", it).apply()
+                                })
+                            }
                         }
                     }
                 }
@@ -2404,12 +2407,34 @@ fun MainScreen() {
                     0 -> HomeScreen(
                         onOpenDrawer = {
                             showAccountSheet = true
+                        },
+                        onOpenDownloads = {
+                            showDownloadsScreen = true
                         }
                     )
                     1 -> PlaylistScreen(backdrop = playlistBackdrop)
                     2 -> LibraryScreen(backdrop = playlistBackdrop)
                     3 -> RecommendationsScreen()
                 }
+            }
+        }
+
+        // Downloads screen overlay
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showDownloadsScreen,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .layerBackdrop(playlistBackdrop)
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                com.arcadesoftware.musix.ui.screens.DownloadsScreen(
+                    onBackClick = { showDownloadsScreen = false }
+                )
             }
         }
 
