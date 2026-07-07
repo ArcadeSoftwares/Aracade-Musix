@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -124,23 +125,14 @@ fun SearchScreen(onBack: () -> Unit) {
         }
     }
 
-    // Outer container — Both MiniPlayer AND Top Bar must be SIBLINGS of the layerBackdrop box,
-    // not children inside it. This architecture avoids circular GPU rendering (SIGSEGV).
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Source box: layerBackdrop captures ONLY this layer as the GPU source
-        Box(
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .layerBackdrop(backdrop)
-                .background(MaterialTheme.colorScheme.background)
+                .padding(bottom = if (currentSong != null) 92.dp else 0.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = if (currentSong != null) 92.dp else 0.dp)
-            ) {
-                // Spacer for the floating Top Bar (statusBarsPadding + Row height + vertical padding)
-                Spacer(modifier = Modifier.statusBarsPadding().height(80.dp))
+            // Spacer for status bar and Search Bar height (44.dp Search Row + 12.dp vertical padding * 2 = 68.dp total top bar block)
+            Spacer(modifier = Modifier.statusBarsPadding().height(68.dp))
 
                 // Results / Suggestions List / History
                 if (isLoading) {
@@ -319,7 +311,6 @@ fun SearchScreen(onBack: () -> Unit) {
                                     )
                                 }
                             }
-                        }
                     }
                 }
             }
@@ -354,25 +345,12 @@ fun SearchScreen(onBack: () -> Unit) {
                 modifier = Modifier.size(18.dp)
             )
 
-            TextField(
+            androidx.compose.foundation.text.BasicTextField(
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
-                placeholder = { Text("Search songs, artists...", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }, modifier = Modifier.size(28.dp)) {
-                            Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = "Clear",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                },
+                    .padding(horizontal = 8.dp),
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Search
                 ),
@@ -380,15 +358,34 @@ fun SearchScreen(onBack: () -> Unit) {
                     onSearch = { searchSongs(query) }
                 ),
                 singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                )
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 15.sp
+                ),
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (query.isEmpty()) {
+                            Text(
+                                text = "Search songs, artists...",
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
             )
+
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { query = "" }, modifier = Modifier.size(28.dp).padding(end = 4.dp)) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Clear",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
 
         // MiniPlayer is a sibling OUTSIDE the layerBackdrop box — it overlays on top

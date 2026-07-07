@@ -1701,11 +1701,11 @@ fun MainScreen() {
                 label = "settings_screen_transition"
             ) { screen ->
                 Column(
-                    modifier = Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (screen == "Main") {
-                        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                             Text(
                                 text = "Account & Settings",
                                 style = MaterialTheme.typography.titleLarge,
@@ -1773,10 +1773,10 @@ fun MainScreen() {
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(cardBg)
-                                    .padding(12.dp), // reduced padding
+                                    .padding(10.dp), // reduced padding
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Glowing Sweep Gradient border on profile image
+                                // Glowing Sweep Gradient border on profile image (ONLY border rotates)
                                 val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
                                 val rotation by infiniteTransition.animateFloat(
                                     initialValue = 0f, targetValue = 360f,
@@ -1787,15 +1787,21 @@ fun MainScreen() {
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .size(54.dp)
-                                        .graphicsLayer { rotationZ = rotation }
-                                        .border(
-                                            2.dp,
-                                            androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
-                                            CircleShape
-                                        ),
+                                        .size(54.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
+                                    // Separated rotating border
+                                    Box(
+                                        modifier = Modifier
+                                            .size(54.dp)
+                                            .graphicsLayer { rotationZ = rotation }
+                                            .border(
+                                                2.dp,
+                                                androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
+                                                CircleShape
+                                            )
+                                    )
+                                    // Static non-rotating profile image
                                     AsyncImage(
                                         model = currentUser?.photoUrl,
                                         contentDescription = "Profile Picture",
@@ -2499,14 +2505,13 @@ fun MainScreen() {
         }
 
         androidx.compose.animation.AnimatedVisibility(
-            visible = currentSong != null,
+            visible = currentSong != null && !showDownloadsScreen,
             modifier = Modifier.align(Alignment.BottomEnd),
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
         ) {
-            val currentBackdrop = if (activePlaylistDetail != null || showDownloadsScreen) mainBackdrop else mainBackdrop
             MiniPlayer(
-                backdrop = currentBackdrop,
+                backdrop = mainBackdrop,
                 currentSong = currentSong,
                 collapsedBottomPadding = if (showBottomBar) 112.dp else 24.dp
             )
