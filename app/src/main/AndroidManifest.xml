@@ -133,6 +133,19 @@
             </intent-filter>
         </activity-alias>
 
+        <activity-alias
+            android:name=".MainActivity3dsoft"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_3dsoft"
+            android:roundIcon="@mipmap/ic_launcher_3dsoft"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <activity
             android:name=".SearchActivity"
             android:exported="false"

@@ -1,5 +1,10 @@
 package com.arcadesoftware.musix
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.graphics.drawscope.clipPath
 
 import android.os.Bundle
@@ -39,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arcadesoftware.musix.ui.theme.MusixTheme
@@ -1345,8 +1349,9 @@ object AppIconManager {
         val orangeAlias = android.content.ComponentName(context, "$packageName.MainActivityOrange")
         val specialAlias = android.content.ComponentName(context, "$packageName.MainActivitySpecial1")
         val sketchAlias = android.content.ComponentName(context, "$packageName.MainActivitySketch")
+        val softAlias = android.content.ComponentName(context, "$packageName.MainActivity3dsoft")
 
-        val components = listOf(defaultAlias, blueAlias, comicAlias, grad2Alias, miniAlias, orangeAlias, specialAlias, sketchAlias)
+        val components = listOf(defaultAlias, blueAlias, comicAlias, grad2Alias, miniAlias, orangeAlias, specialAlias, sketchAlias, softAlias)
         val enableComponent = components[iconIndex]
         
         components.forEach {
@@ -1431,22 +1436,21 @@ class MainActivity : ComponentActivity() {
                                 androidx.compose.animation.core.animate(
                                     initialValue = 0f,
                                     targetValue = maxRadius,
-                                    animationSpec = androidx.compose.animation.core.tween(700, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                    animationSpec = androidx.compose.animation.core.tween(700, easing = LinearEasing)
                                 ) { value, _ ->
                                     radius = value
                                 }
                                 revealState = null
                             }
                             
-                            androidx.compose.foundation.Canvas(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
-                                val path = androidx.compose.ui.graphics.Path().apply {
-                                    addRect(androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height))
-                                    addOval(androidx.compose.ui.geometry.Rect(0f - radius, size.height - radius, 0f + radius, size.height + radius))
-                                    fillType = androidx.compose.ui.graphics.PathFillType.EvenOdd
-                                }
-                                clipPath(path) {
-                                    drawImage(image = state)
-                                }
+                            androidx.compose.foundation.Canvas(modifier = androidx.compose.ui.Modifier.fillMaxSize().graphicsLayer { alpha = 0.99f }) {
+                                drawImage(image = state)
+                                drawCircle(
+                                    color = androidx.compose.ui.graphics.Color.Black,
+                                    radius = radius,
+                                    center = Offset(0f, size.height),
+                                    blendMode = BlendMode.Clear
+                                )
                             }
                         }
                     }
@@ -2105,9 +2109,10 @@ fun MainScreen() {
                             R.mipmap.ic_launcher_mini1,
                             R.mipmap.ic_launcher_orange,
                             R.mipmap.ic_launcher_special1,
-                            R.mipmap.ic_launcher_sketch
+                            R.mipmap.ic_launcher_sketch,
+                            R.mipmap.ic_launcher_3dsoft
                         )
-                        val iconNames = listOf("Default", "Blue", "Comic", "Grad 2", "Mini", "Orange", "Special", "Sketch")
+                        val iconNames = listOf("Default", "Blue", "Comic", "Grad 2", "Mini", "Orange", "Special", "Sketch", "3D Soft")
                         
                         items(icons.size) { index ->
                             val iconRes = icons[index]
