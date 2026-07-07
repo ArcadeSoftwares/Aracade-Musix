@@ -1512,19 +1512,23 @@ fun MainScreen() {
             val isLightMode = !androidx.compose.foundation.isSystemInDarkTheme()
             val cardBg = if (isLightMode) Color(0xFFF2F2F7) else Color(0xFF1C1C1E)
 
+            var settingsScreen by remember { mutableStateOf("Main") }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(androidx.compose.foundation.rememberScrollState())
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(16.dp)
             ) {
-                Text(
-                    text = "Account",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp),
-                    fontWeight = FontWeight.Bold
-                )
+                if (settingsScreen == "Main") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        Text(
+                            text = "Account",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
 
                 if (currentUser == null) {
                     OutlinedButton(
@@ -1828,27 +1832,7 @@ fun MainScreen() {
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            showAccountSheet = false
-                            // Push final data snapshot before signing out, then sign out
-                            com.arcadesoftware.musix.db.FirestoreSyncManager.pushAllLocalDataToFirestore(context)
-                            com.arcadesoftware.musix.db.FirestoreSyncManager.clearAllLocalData(context)
-                            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
-                            com.arcadesoftware.musix.components.ByeAnimManager.trigger()
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFFFF453A) else Color(0xFFFF3B30),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(Icons.Rounded.Logout, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                        Text("Sign Out")
-                    }
+                }
                 }
                 Spacer(modifier = Modifier.height(48.dp))
             }

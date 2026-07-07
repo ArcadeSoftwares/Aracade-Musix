@@ -202,6 +202,7 @@ object FirestoreSyncManager {
                         val plId = (plChild.child("id").value as? Number)?.toLong()?.toString()
                             ?: plChild.key ?: return@forEach
                         val plDocRef = userDocRef.collection("playlists").document(plId)
+                        plDocRef.set(mapOf("id" to plId)).await()
                         plDocRef.collection("info").document("meta").set(
                             mapOf(
                                 "id" to plId,
@@ -419,6 +420,7 @@ object FirestoreSyncManager {
                 val playlists = db.musicDao().getPlaylists().first()
                 playlists.forEach { playlist ->
                     val plRef = ref.collection("playlists").document(playlist.id.toString())
+                    plRef.set(mapOf("id" to playlist.id.toString())).await()
                     plRef.collection("info").document("meta").set(mapOf(
                         "id" to playlist.id, "name" to playlist.name,
                         "coverUri" to playlist.coverUri, "createdAt" to playlist.createdAt

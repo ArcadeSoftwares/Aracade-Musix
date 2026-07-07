@@ -47,6 +47,10 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy.force("com.google.protobuf:protobuf-javalite:3.22.3")
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

@@ -249,7 +249,7 @@ fun AddToPlaylistSheet(
                                                 position = Int.MAX_VALUE
                                             )
                                         )
-                                        com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
+                                        com.arcadesoftware.musix.db.FirestoreSyncManager.schedulePushAllLocalDataToFirestore(context)
                                     }
                                     added = true
                                 }
