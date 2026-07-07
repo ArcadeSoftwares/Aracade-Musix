@@ -1573,17 +1573,17 @@ fun MainScreen() {
                 com.arcadesoftware.musix.db.FirestoreSyncManager.lastSyncedUid = user.uid
                 // Step 1: Migrate RTDB → Firestore (no-op if already migrated)
                 com.arcadesoftware.musix.db.FirestoreSyncManager.migrateFromRtdbIfNeeded(context) {
-                    // Step 2: Fetch & merge Firestore data into local Room DB
+                    // Step 2: Fetch & merge Firestore data into local Room DB.
+                    // Room StateFlows (userPlaylists, playHistory, etc.) will emit new values
+                    // automatically — no recreate() needed, which was causing the flicker.
                     com.arcadesoftware.musix.db.FirestoreSyncManager.fetchAndMergeFirestoreData(context) {
-                        // Step 3: Push local data up to Firestore
+                        // Step 3: Push any new local data back up to Firestore
                         com.arcadesoftware.musix.db.FirestoreSyncManager.pushAllLocalDataToFirestore(context)
-                        (context as? android.app.Activity)?.runOnUiThread {
-                            (context as? android.app.Activity)?.recreate()
-                        }
                     }
                 }
             } else if (user == null && com.arcadesoftware.musix.db.FirestoreSyncManager.lastSyncedUid != null) {
                 com.arcadesoftware.musix.db.FirestoreSyncManager.lastSyncedUid = null
+                // recreate() on sign-out is intentional: clears all in-memory state cleanly
                 (context as? android.app.Activity)?.runOnUiThread {
                     (context as? android.app.Activity)?.recreate()
                 }

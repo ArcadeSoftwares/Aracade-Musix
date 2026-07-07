@@ -524,36 +524,60 @@ object FirestoreSyncManager {
 
                 // User Playlists
                 ref.collection("playlists").get().await().documents.forEach { plDoc ->
+                    // Parse playlist ID — use 0 only as a last resort (Room will auto-assign)
                     val plId = plDoc.id.toLongOrNull() ?: 0L
-                    val infoDoc = ref.collection("playlists").document(plDoc.id)
-                        .collection("info").document("meta").get().await()
-                    val name = infoDoc.getString("name") ?: return@forEach
-                    val coverUri = infoDoc.getString("coverUri")
-                    val createdAt = infoDoc.getLong("createdAt") ?: System.currentTimeMillis()
 
+                    // Fetch info/meta sub-doc; fall back to parent doc fields so we never
+                    // silently skip a playlist due to a missing sub-doc.
+                    val infoDoc = try {
+                        ref.collection("playlists").document(plDoc.id)
+                            .collection("info").document("meta").get().await()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not fetch info/meta for playlist ${plDoc.id}", e)
+                        null
+                    }
+
+                    // Resolve name: info/meta → parent doc → "Untitled" (never skip)
+                    val name = infoDoc?.getString("name")
+                        ?: (plDoc.get("name") as? String)
+                        ?: "Untitled"
+                    val coverUri = infoDoc?.getString("coverUri")
+                        ?: (plDoc.get("coverUri") as? String)
+                    val createdAt = infoDoc?.getLong("createdAt")
+                        ?: (plDoc.getLong("createdAt"))
+                        ?: System.currentTimeMillis()
+
+                    // Insert playlist; IGNORE strategy returns -1 if already exists
                     val insertedId = db.musicDao().insertPlaylist(
                         PlaylistEntity(id = plId, name = name, coverUri = coverUri, createdAt = createdAt)
                     )
+                    // If Room returned -1 (duplicate), use the stored plId as the effective id
                     val effectiveId = if (insertedId == -1L) plId else insertedId
 
-                    ref.collection("playlists").document(plDoc.id)
-                        .collection("songs").orderBy("position").get().await()
-                        .documents.forEachIndexed { index, songDoc ->
-                            val songId = songDoc.getString("songId") ?: return@forEachIndexed
-                            db.musicDao().insertPlayHistory(PlayHistoryEntity(
-                                songId,
-                                songDoc.getString("title") ?: "Unknown",
-                                songDoc.getString("artistName") ?: "Unknown",
-                                songDoc.getString("artistId"),
-                                songDoc.getString("thumbnailUrl") ?: ""
-                            ))
-                            if (db.musicDao().isSongInPlaylist(effectiveId, songId) == 0) {
-                                db.musicDao().insertPlaylistSong(PlaylistSongEntity(
-                                    playlistId = effectiveId, songId = songId, position = index,
-                                    addedAt = songDoc.getLong("addedAt") ?: System.currentTimeMillis()
+                    // Fetch and insert all songs for this playlist
+                    try {
+                        ref.collection("playlists").document(plDoc.id)
+                            .collection("songs").orderBy("position").get().await()
+                            .documents.forEachIndexed { index, songDoc ->
+                                val songId = songDoc.getString("songId") ?: return@forEachIndexed
+                                // Ensure song metadata exists in play_history for the JOIN query
+                                db.musicDao().insertPlayHistory(PlayHistoryEntity(
+                                    songId,
+                                    songDoc.getString("title") ?: "Unknown",
+                                    songDoc.getString("artistName") ?: "Unknown",
+                                    songDoc.getString("artistId"),
+                                    songDoc.getString("thumbnailUrl") ?: ""
                                 ))
+                                if (db.musicDao().isSongInPlaylist(effectiveId, songId) == 0) {
+                                    db.musicDao().insertPlaylistSong(PlaylistSongEntity(
+                                        playlistId = effectiveId, songId = songId, position = index,
+                                        addedAt = songDoc.getLong("addedAt") ?: System.currentTimeMillis()
+                                    ))
+                                }
                             }
-                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to restore songs for playlist ${plDoc.id}", e)
+                    }
                 }
 
                 Log.d(TAG, "Firestore merge complete")
