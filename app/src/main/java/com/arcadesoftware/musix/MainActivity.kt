@@ -1882,22 +1882,39 @@ fun MainScreen() {
                     if (currentUser != null) {
                         Spacer(modifier = Modifier.height(24.dp))
                         
+                        var isSigningOut by remember { mutableStateOf(false) }
                         Button(
                             onClick = {
-                                showAccountSheet = false
-                                com.arcadesoftware.musix.db.FirestoreSyncManager.pushAllLocalDataToFirestore(context)
-                                com.arcadesoftware.musix.db.FirestoreSyncManager.clearAllLocalData(context)
-                                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
-                                com.arcadesoftware.musix.components.ByeAnimManager.trigger()
+                                if (!isSigningOut) {
+                                    isSigningOut = true
+                                    showAccountSheet = false
+                                    com.arcadesoftware.musix.components.ByeAnimManager.trigger()
+                                    // Push all data first, THEN clear local data and sign out.
+                                    // This prevents a race condition where clearAllLocalData()
+                                    // was called before the async push had finished.
+                                    com.arcadesoftware.musix.db.FirestoreSyncManager.pushAllLocalDataToFirestoreImmediately(context) {
+                                        com.arcadesoftware.musix.db.FirestoreSyncManager.clearAllLocalData(context)
+                                        com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+                                    }
+                                }
                             },
+                            enabled = !isSigningOut,
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFFFF453A) else Color(0xFFFF3B30),
                                 contentColor = Color.White
                             )
                         ) {
-                            Icon(Icons.Rounded.Logout, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                            Text("Sign Out")
+                            if (isSigningOut) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp).padding(end = 8.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Rounded.Logout, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            }
+                            Text(if (isSigningOut) "Signing out..." else "Sign Out")
                         }
                     }
                 } else if (settingsScreen == "Cloud") {

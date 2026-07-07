@@ -575,6 +575,184 @@ object FirestoreSyncManager {
         syncPlaylists(context)
     }
 
+    /**
+     * Pushes all local data to Firestore and calls [onComplete] once every task finishes
+     * (or after a 5-second timeout guard). Use this when you need to ensure data is safely
+     * uploaded before wiping local storage (e.g., on sign-out).
+     */
+    fun pushAllLocalDataToFirestoreImmediately(context: Context, onComplete: () -> Unit) {
+        val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        if (user == null) { onComplete(); return }
+        val ref = userRef()
+        if (ref == null) { onComplete(); return }
+
+        syncJob?.cancel()
+
+        // 7 tasks: details, settings, liked_songs, liked_artists, liked_playlists, history, playlists
+        var remainingTasks = 7
+        var finished = false
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            if (!finished) {
+                finished = true
+                Log.d(TAG, "pushAllLocalDataToFirestoreImmediately timed out — proceeding")
+                onComplete()
+            }
+        }
+        handler.postDelayed(timeoutRunnable, 5000)
+
+        fun checkComplete() {
+            remainingTasks--
+            if (remainingTasks <= 0 && !finished) {
+                finished = true
+                handler.removeCallbacks(timeoutRunnable)
+                Log.d(TAG, "pushAllLocalDataToFirestoreImmediately finished successfully")
+                onComplete()
+            }
+        }
+
+        val p = context.getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE)
+
+        // 1. Details
+        syncScope.launch {
+            try {
+                ref.collection("details").document("profile").set(mapOf(
+                    "displayName" to (user.displayName ?: ""),
+                    "email" to (user.email ?: ""),
+                    "photoUrl" to (user.photoUrl?.toString() ?: ""),
+                    "uid" to user.uid,
+                    "lastSeen" to com.google.firebase.Timestamp.now()
+                ), com.google.firebase.firestore.SetOptions.merge()).await()
+            } catch (e: Exception) { Log.e(TAG, "immediate push details failed", e) }
+            finally { android.os.Handler(android.os.Looper.getMainLooper()).post { checkComplete() } }
+        }
+
+        // 2. Settings
+        syncScope.launch {
+            try {
+                ref.collection("settings").document("prefs").set(mapOf(
+                    "sync_playlists" to p.getBoolean("sync_playlists", true),
+                    "sync_library" to p.getBoolean("sync_library", true),
+                    "sync_history" to p.getBoolean("sync_history", true),
+                    "resume_playback" to p.getBoolean("resume_playback", true),
+                    "always_shuffle" to p.getBoolean("always_shuffle", false),
+                    "auto_download_playlists" to p.getBoolean("auto_download_playlists", false),
+                    "wifi_only_download" to p.getBoolean("wifi_only_download", false)
+                )).await()
+            } catch (e: Exception) { Log.e(TAG, "immediate push settings failed", e) }
+            finally { android.os.Handler(android.os.Looper.getMainLooper()).post { checkComplete() } }
+        }
+
+        // 3. Liked Songs IDs + metadata
+        syncScope.launch {
+            try {
+                val ids = LikedSongsManager.getLikedSongIds(context).toList()
+                ref.collection("liked_songs").document("ids").set(mapOf("ids" to ids)).await()
+                val historyList = AppDatabase.getDatabase(context).musicDao().getPlayHistory().first()
+                if (historyList.isNotEmpty()) {
+                    var batch = fs().batch(); var count = 0
+                    for (id in ids) {
+                        val song = historyList.find { it.id == id } ?: continue
+                        batch.set(ref.collection("liked_songs_metadata").document(id), mapOf(
+                            "id" to song.id, "title" to song.title,
+                            "artistName" to song.artistName, "artistId" to song.artistId,
+                            "thumbnailUrl" to song.thumbnailUrl
+                        ))
+                        count++
+                        if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+                    }
+                    if (count % 400 != 0) batch.commit().await()
+                }
+            } catch (e: Exception) { Log.e(TAG, "immediate push liked_songs failed", e) }
+            finally { android.os.Handler(android.os.Looper.getMainLooper()).post { checkComplete() } }
+        }
+
+        // 4. Liked Artists
+        syncScope.launch {
+            try {
+                val artists = LikedArtistsManager.getLikedArtists(context)
+                var batch = fs().batch(); var count = 0
+                artists.forEach { a ->
+                    a.id?.let { id ->
+                        batch.set(ref.collection("liked_artists").document(id),
+                            mapOf("id" to id, "name" to a.name, "thumbnailUrl" to a.thumbnailUrl))
+                    }
+                    count++
+                    if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+                }
+                if (count % 400 != 0) batch.commit().await()
+            } catch (e: Exception) { Log.e(TAG, "immediate push liked_artists failed", e) }
+            finally { android.os.Handler(android.os.Looper.getMainLooper()).post { checkComplete() } }
+        }
+
+        // 5. Liked Playlists
+        syncScope.launch {
+            try {
+                val playlists = LikedPlaylistsManager.getLikedPlaylists(context)
+                var batch = fs().batch(); var count = 0
+                playlists.forEach { pl ->
+                    batch.set(ref.collection("liked_playlists").document(pl.id), mapOf(
+                        "id" to pl.id, "title" to pl.title, "thumbnail" to pl.thumbnail,
+                        "type" to pl.type, "subtitle" to pl.subtitle
+                    ))
+                    count++
+                    if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+                }
+                if (count % 400 != 0) batch.commit().await()
+            } catch (e: Exception) { Log.e(TAG, "immediate push liked_playlists failed", e) }
+            finally { android.os.Handler(android.os.Looper.getMainLooper()).post { checkComplete() } }
+        }
+
+        // 6. History
+        syncScope.launch {
+            try {
+                val history = AppDatabase.getDatabase(context).musicDao().getPlayHistory().first()
+                var batch = fs().batch(); var count = 0
+                history.take(200).forEach { song ->
+                    batch.set(ref.collection("history").document(song.id), mapOf(
+                        "id" to song.id, "title" to song.title,
+                        "artistName" to song.artistName, "artistId" to song.artistId,
+                        "thumbnailUrl" to song.thumbnailUrl, "timestamp" to song.timestamp
+                    ))
+                    count++
+                    if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+                }
+                if (count % 400 != 0) batch.commit().await()
+            } catch (e: Exception) { Log.e(TAG, "immediate push history failed", e) }
+            finally { android.os.Handler(android.os.Looper.getMainLooper()).post { checkComplete() } }
+        }
+
+        // 7. User Playlists
+        syncScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(context)
+                val playlists = db.musicDao().getPlaylists().first()
+                playlists.forEach { playlist ->
+                    val plRef = ref.collection("playlists").document(playlist.id.toString())
+                    plRef.set(mapOf("id" to playlist.id.toString())).await()
+                    plRef.collection("info").document("meta").set(mapOf(
+                        "id" to playlist.id, "name" to playlist.name,
+                        "coverUri" to playlist.coverUri, "createdAt" to playlist.createdAt
+                    )).await()
+                    val songs = db.musicDao().getSongsForPlaylist(playlist.id).first()
+                    var batch = fs().batch(); var count = 0
+                    songs.forEachIndexed { index, song ->
+                        batch.set(plRef.collection("songs").document(song.id), mapOf(
+                            "songId" to song.id, "position" to index,
+                            "title" to song.title, "artistName" to song.artistName,
+                            "artistId" to song.artistId, "thumbnailUrl" to song.thumbnailUrl,
+                            "addedAt" to System.currentTimeMillis()
+                        ))
+                        count++
+                        if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+                    }
+                    if (count % 400 != 0) batch.commit().await()
+                }
+            } catch (e: Exception) { Log.e(TAG, "immediate push playlists failed", e) }
+            finally { android.os.Handler(android.os.Looper.getMainLooper()).post { checkComplete() } }
+        }
+    }
+
     fun clearAllLocalData(context: Context) {
         listOf(
             "liked_songs_prefs", "liked_artists_prefs",

@@ -116,7 +116,7 @@ fun PlaylistScreen(
     val selectedUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
     var activeBuiltInPlaylist by remember { mutableStateOf<String?>(null) } // "liked" or "downloads"
 
-    LaunchedEffect(activePlaylistDetail) {
+    LaunchedEffect(activePlaylistDetail, userPlaylists) {
         if (activePlaylistDetail == null) {
             likedPlaylists = withContext(Dispatchers.IO) { LikedPlaylistsManager.getLikedPlaylists(context) }
             likedSongIds = withContext(Dispatchers.IO) { LikedSongsManager.getLikedSongIds(context) }
