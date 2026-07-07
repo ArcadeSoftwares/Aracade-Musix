@@ -1048,12 +1048,17 @@ fun LiquidToggle(
             onDragStarted = {},
             onDragStopped = {
                 if (didDrag) {
-                    fraction = if (targetValue >= 0.5f) 1f else 0f
-                    onSelect(fraction == 1f)
+                    val target = if (targetValue >= 0.5f) 1f else 0f
+                    fraction = target
+                    animateToValue(target)
+                    onSelect(target == 1f)
                     didDrag = false
                 } else {
-                    fraction = if (selected()) 0f else 1f
-                    onSelect(fraction == 1f)
+                    val nextState = !selected()
+                    val target = if (nextState) 1f else 0f
+                    fraction = target
+                    animateToValue(target)
+                    onSelect(nextState)
                 }
             },
             onDrag = { _, dragAmount ->
