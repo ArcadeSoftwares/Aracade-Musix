@@ -54,7 +54,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = viewModel(), onBackClick: ((
 
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(top = topPadding, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {

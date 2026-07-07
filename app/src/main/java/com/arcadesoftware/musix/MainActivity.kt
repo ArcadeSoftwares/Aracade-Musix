@@ -1773,14 +1773,35 @@ fun MainScreen() {
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(cardBg)
-                                    .padding(16.dp),
+                                    .padding(12.dp), // reduced padding
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                AsyncImage(
-                                    model = currentUser?.photoUrl,
-                                    contentDescription = "Profile Picture",
-                                    modifier = Modifier.size(50.dp).clip(CircleShape)
+                                // Glowing Sweep Gradient border on profile image
+                                val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                                val rotation by infiniteTransition.animateFloat(
+                                    initialValue = 0f, targetValue = 360f,
+                                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                                        animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
+                                        repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                                    )
                                 )
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .graphicsLayer { rotationZ = rotation }
+                                        .border(
+                                            2.dp,
+                                            androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AsyncImage(
+                                        model = currentUser?.photoUrl,
+                                        contentDescription = "Profile Picture",
+                                        modifier = Modifier.size(48.dp).clip(CircleShape)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
                                     Text(currentUser?.displayName ?: "Google User", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -1944,7 +1965,7 @@ fun MainScreen() {
                                     }
                                 },
                                 enabled = !isSigningOut,
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFFFF453A) else Color(0xFFFF3B30),
                                     contentColor = Color.White
@@ -2450,7 +2471,7 @@ fun MainScreen() {
                 modifier = Modifier
                     .fillMaxSize()
                     .layerBackdrop(mainBackdrop)
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(Color.Transparent) // Avoid solid drawing overlaps
             ) {
                 com.arcadesoftware.musix.ui.screens.DownloadsScreen(
                     onBackClick = { showDownloadsScreen = false }
