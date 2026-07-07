@@ -29,7 +29,7 @@
             android:theme="@style/Theme.Musix">
         </activity>
 
-        <activity-alias
+                <activity-alias
             android:name=".MainActivityDefault"
             android:enabled="true"
             android:exported="true"
@@ -43,11 +43,11 @@
         </activity-alias>
 
         <activity-alias
-            android:name=".MainActivityDark"
+            android:name=".MainActivityBlueGradient"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_dark"
-            android:roundIcon="@mipmap/ic_launcher_dark_round"
+            android:icon="@mipmap/ic_launcher_bluegradient"
+            android:roundIcon="@mipmap/ic_launcher_bluegradient"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -56,11 +56,63 @@
         </activity-alias>
 
         <activity-alias
-            android:name=".MainActivityLight"
+            android:name=".MainActivityComic1"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_light"
-            android:roundIcon="@mipmap/ic_launcher_light_round"
+            android:icon="@mipmap/ic_launcher_comic1"
+            android:roundIcon="@mipmap/ic_launcher_comic1"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityGradient2"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_gradient2"
+            android:roundIcon="@mipmap/ic_launcher_gradient2"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityMini1"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_mini1"
+            android:roundIcon="@mipmap/ic_launcher_mini1"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityOrange"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_orange"
+            android:roundIcon="@mipmap/ic_launcher_orange"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivitySpecial1"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_special1"
+            android:roundIcon="@mipmap/ic_launcher_special1"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

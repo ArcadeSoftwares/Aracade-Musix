@@ -1336,10 +1336,14 @@ object AppIconManager {
         val packageName = context.packageName
 
         val defaultAlias = android.content.ComponentName(context, "$packageName.MainActivityDefault")
-        val darkAlias = android.content.ComponentName(context, "$packageName.MainActivityDark")
-        val lightAlias = android.content.ComponentName(context, "$packageName.MainActivityLight")
+        val blueAlias = android.content.ComponentName(context, "$packageName.MainActivityBlueGradient")
+        val comicAlias = android.content.ComponentName(context, "$packageName.MainActivityComic1")
+        val grad2Alias = android.content.ComponentName(context, "$packageName.MainActivityGradient2")
+        val miniAlias = android.content.ComponentName(context, "$packageName.MainActivityMini1")
+        val orangeAlias = android.content.ComponentName(context, "$packageName.MainActivityOrange")
+        val specialAlias = android.content.ComponentName(context, "$packageName.MainActivitySpecial1")
 
-        val components = listOf(defaultAlias, darkAlias, lightAlias)
+        val components = listOf(defaultAlias, blueAlias, comicAlias, grad2Alias, miniAlias, orangeAlias, specialAlias)
         val enableComponent = components[iconIndex]
         
         components.forEach {
@@ -2043,13 +2047,24 @@ fun MainScreen() {
                     // App Icon Selection
                     val appIconPref = sharedPrefs.getInt("app_icon_preference", 0)
                     Text("App Icon", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp, start = 8.dp))
-                    Row(
+                    
+                    androidx.compose.foundation.lazy.LazyRow(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(cardBg).padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceAround
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        val icons = listOf(R.mipmap.ic_launcher, R.mipmap.ic_launcher_dark, R.mipmap.ic_launcher_light)
-                        val iconNames = listOf("Default", "Dark", "Light")
-                        icons.forEachIndexed { index, iconRes ->
+                        val icons = listOf(
+                            R.mipmap.ic_launcher,
+                            R.mipmap.ic_launcher_bluegradient,
+                            R.mipmap.ic_launcher_comic1,
+                            R.mipmap.ic_launcher_gradient2,
+                            R.mipmap.ic_launcher_mini1,
+                            R.mipmap.ic_launcher_orange,
+                            R.mipmap.ic_launcher_special1
+                        )
+                        val iconNames = listOf("Default", "Blue", "Comic", "Grad 2", "Mini", "Orange", "Special")
+                        
+                        items(icons.size) { index ->
+                            val iconRes = icons[index]
                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable {
                                 sharedPrefs.edit().putInt("app_icon_preference", index).apply()
                                 AppIconManager.changeAppIcon(context, index)
