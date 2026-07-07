@@ -1329,6 +1329,33 @@ object PlayerManager {
 }
 
 
+
+object AppIconManager {
+    fun changeAppIcon(context: android.content.Context, iconIndex: Int) {
+        val pm = context.packageManager
+        val packageName = context.packageName
+
+        val defaultAlias = android.content.ComponentName(context, "$packageName.MainActivityDefault")
+        val darkAlias = android.content.ComponentName(context, "$packageName.MainActivityDark")
+        val lightAlias = android.content.ComponentName(context, "$packageName.MainActivityLight")
+
+        val components = listOf(defaultAlias, darkAlias, lightAlias)
+        val enableComponent = components[iconIndex]
+        
+        components.forEach {
+            pm.setComponentEnabledSetting(
+                it,
+                if (it == enableComponent) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP
+            )
+        }
+    }
+}
+
+
+val LocalThemePreference = androidx.compose.runtime.compositionLocalOf<Int> { 0 }
+val LocalThemePreferenceSetter = androidx.compose.runtime.compositionLocalOf<(Int) -> Unit> { {} }
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1354,9 +1381,27 @@ class MainActivity : ComponentActivity() {
             android.util.Log.e("MainActivity", "Failed to configure Coil ImageLoader cache", e)
         }
 
+        val sharedPrefs = getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
         setContent {
-            MusixTheme {
-                MainScreen()
+            var themePref by remember { mutableStateOf(sharedPrefs.getInt("theme_preference", 0)) }
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val darkTheme = when (themePref) {
+                1 -> false
+                2 -> true
+                else -> isSystemDark
+            }
+            
+            // Allow MainScreen to update themePref
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalThemePreference provides themePref,
+                LocalThemePreferenceSetter provides { newPref: Int ->
+                    themePref = newPref
+                    sharedPrefs.edit().putInt("theme_preference", newPref).apply()
+                }
+            ) {
+                MusixTheme(darkTheme = darkTheme) {
+                    MainScreen()
+                }
             }
         }
     }
@@ -1509,10 +1554,19 @@ fun MainScreen() {
             var autoDownloadPlaylists by remember { mutableStateOf(sharedPrefs.getBoolean("auto_download_playlists", false)) }
             var wifiOnlyDownload by remember { mutableStateOf(sharedPrefs.getBoolean("wifi_only_download", false)) }
 
-            val isLightMode = !androidx.compose.foundation.isSystemInDarkTheme()
-            val cardBg = if (isLightMode) Color(0xFFF2F2F7) else Color(0xFF1C1C1E)
+            val themePref = LocalThemePreference.current
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val isLightMode = when (themePref) {
+                1 -> true
+                2 -> false
+                else -> !isSystemDark
+            }
+            val targetCardBg = if (isLightMode) Color(0xFFF2F2F7) else Color(0xFF1C1C1E)
+            val cardBg by androidx.compose.animation.animateColorAsState(targetCardBg, androidx.compose.animation.core.tween(500))
 
             var settingsScreen by remember { mutableStateOf("Main") }
+            var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+            var deleteConfirmText by remember { mutableStateOf("") }
 
             Column(
                 modifier = Modifier
@@ -1530,124 +1584,282 @@ fun MainScreen() {
                         )
                     }
 
-                if (currentUser == null) {
-                    OutlinedButton(
-                        onClick = {
-                            if (isSigningIn) return@OutlinedButton
-                            isSigningIn = true
-                            scope.launch {
-                                try {
-                                    val credentialManager = androidx.credentials.CredentialManager.create(context)
-                                    val request = androidx.credentials.GetCredentialRequest.Builder()
-                                        .addCredentialOption(
-                                            com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
-                                                .setFilterByAuthorizedAccounts(false)
-                                                .setServerClientId("983178184530-c0grj95ua7kb862qnr0f9nnhr2g3t5qt.apps.googleusercontent.com")
-                                                .setAutoSelectEnabled(false)
-                                                .build()
-                                        )
-                                        .build()
-                                    val result = credentialManager.getCredential(context, request)
-                                    val credential = result.credential
-                                    if (credential is androidx.credentials.CustomCredential &&
-                                        credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                                    ) {
-                                        val googleIdTokenCredential = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
-                                        val idToken = googleIdTokenCredential.idToken
-                                        val authCredential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
-                                        com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(authCredential)
-                                            .addOnSuccessListener {
-                                                isSigningIn = false
-                                                com.arcadesoftware.musix.db.FirestoreSyncManager.syncUserDetails(context)
-                                                showWelcomePopup = true
-                                                scope.launch {
-                                                    kotlinx.coroutines.delay(2500)
-                                                    showWelcomePopup = false
+                    if (currentUser == null) {
+                        OutlinedButton(
+                            onClick = {
+                                if (isSigningIn) return@OutlinedButton
+                                isSigningIn = true
+                                scope.launch {
+                                    try {
+                                        val credentialManager = androidx.credentials.CredentialManager.create(context)
+                                        val request = androidx.credentials.GetCredentialRequest.Builder()
+                                            .addCredentialOption(
+                                                com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
+                                                    .setFilterByAuthorizedAccounts(false)
+                                                    .setServerClientId("983178184530-c0grj95ua7kb862qnr0f9nnhr2g3t5qt.apps.googleusercontent.com")
+                                                    .setAutoSelectEnabled(false)
+                                                    .build()
+                                            )
+                                            .build()
+                                        val result = credentialManager.getCredential(context, request)
+                                        val credential = result.credential
+                                        if (credential is androidx.credentials.CustomCredential &&
+                                            credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                                        ) {
+                                            val googleIdTokenCredential = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
+                                            val idToken = googleIdTokenCredential.idToken
+                                            val authCredential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                                            com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(authCredential)
+                                                .addOnSuccessListener {
+                                                    isSigningIn = false
+                                                    com.arcadesoftware.musix.db.FirestoreSyncManager.syncUserDetails(context)
+                                                    showWelcomePopup = true
+                                                    scope.launch {
+                                                        kotlinx.coroutines.delay(2500)
+                                                        showWelcomePopup = false
+                                                    }
                                                 }
-                                            }
-                                            .addOnFailureListener {
-                                                isSigningIn = false
-                                                android.widget.Toast.makeText(context, "Sign in failed: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
-                                            }
-                                    } else {
+                                                .addOnFailureListener {
+                                                    isSigningIn = false
+                                                    android.widget.Toast.makeText(context, "Sign in failed: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                }
+                                        } else {
+                                            isSigningIn = false
+                                        }
+                                    } catch (e: Exception) {
                                         isSigningIn = false
+                                        android.widget.Toast.makeText(context, "Google Sign-In failed", android.widget.Toast.LENGTH_SHORT).show()
+                                        e.printStackTrace()
                                     }
-                                } catch (e: Exception) {
-                                    isSigningIn = false
-                                    android.widget.Toast.makeText(context, "Google Sign-In failed", android.widget.Toast.LENGTH_SHORT).show()
-                                    e.printStackTrace()
                                 }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
+                        ) {
+                            if (isSigningIn) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color.Black
+                                )
+                            } else {
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_google),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = Color.Unspecified
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Sign in with Google",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 16.sp
+                                )
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        if (isSigningIn) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.5.dp,
-                                color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else Color.Black
-                            )
-                        } else {
-                            Icon(
-                                painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_google),
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = Color.Unspecified
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Sign in with Google",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
-                            )
                         }
-                    }
-                } else {
-                    // Profile Info Card
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(cardBg)
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
-                        val rotation by infiniteTransition.animateFloat(
-                            initialValue = 0f, targetValue = 360f,
-                            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                                animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
-                                repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(cardBg)
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                            val rotation by infiniteTransition.animateFloat(
+                                initialValue = 0f, targetValue = 360f,
+                                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                                    animation = androidx.compose.animation.core.tween(3000, easing = androidx.compose.animation.core.LinearEasing),
+                                    repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                                )
                             )
-                        )
-                        Box(contentAlignment = Alignment.Center) {
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .graphicsLayer { rotationZ = rotation }
-                                    .border(
-                                        2.dp,
-                                        androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
-                                        androidx.compose.foundation.shape.CircleShape
-                                    )
-                            )
-                            AsyncImage(
-                                model = currentUser?.photoUrl,
-                                contentDescription = "Profile Picture",
-                                modifier = Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(currentUser?.displayName ?: "User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(currentUser?.email ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Box(contentAlignment = Alignment.Center) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .graphicsLayer { rotationZ = rotation }
+                                        .border(
+                                            2.dp,
+                                            androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Cyan, Color.Magenta, Color.Yellow, Color.Cyan)),
+                                            androidx.compose.foundation.shape.CircleShape
+                                        )
+                                )
+                                AsyncImage(
+                                    model = currentUser?.photoUrl,
+                                    contentDescription = "Profile Picture",
+                                    modifier = Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(currentUser?.displayName ?: "User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(currentUser?.email ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Cloud Sync Features Card
+                    // Cloud Sync Features Menu Button
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(cardBg)
+                                .then(if (currentUser == null) Modifier.graphicsLayer { alpha = 0.5f } else Modifier)
+                                .clickable(enabled = currentUser != null) { settingsScreen = "Cloud" }
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Rounded.Cloud, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text("Cloud Sync Features", fontWeight = FontWeight.Medium, fontSize = 16.sp)
+                                }
+                                Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Gray)
+                            }
+                        }
+
+                        if (currentUser == null) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        if (isSigningIn) return@clickable
+                                        isSigningIn = true
+                                        scope.launch {
+                                            try {
+                                                val credentialManager = androidx.credentials.CredentialManager.create(context)
+                                                val request = androidx.credentials.GetCredentialRequest.Builder()
+                                                    .addCredentialOption(
+                                                        com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
+                                                            .setFilterByAuthorizedAccounts(false)
+                                                            .setServerClientId("983178184530-c0grj95ua7kb862qnr0f9nnhr2g3t5qt.apps.googleusercontent.com")
+                                                            .setAutoSelectEnabled(false)
+                                                            .build()
+                                                    )
+                                                    .build()
+                                                val result = credentialManager.getCredential(context, request)
+                                                val credential = result.credential
+                                                if (credential is androidx.credentials.CustomCredential &&
+                                                    credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                                                ) {
+                                                    val googleIdTokenCredential = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
+                                                    val idToken = googleIdTokenCredential.idToken
+                                                    val authCredential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                                                    com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(authCredential)
+                                                        .addOnSuccessListener {
+                                                            isSigningIn = false
+                                                            com.arcadesoftware.musix.db.FirestoreSyncManager.syncUserDetails(context)
+                                                            showWelcomePopup = true
+                                                            scope.launch {
+                                                                kotlinx.coroutines.delay(2500)
+                                                                showWelcomePopup = false
+                                                            }
+                                                        }
+                                                        .addOnFailureListener {
+                                                            isSigningIn = false
+                                                            android.widget.Toast.makeText(context, "Sign in failed: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                        }
+                                                } else {
+                                                    isSigningIn = false
+                                                }
+                                            } catch (e: Exception) {
+                                                isSigningIn = false
+                                                android.widget.Toast.makeText(context, "Google Sign-In failed", android.widget.Toast.LENGTH_SHORT).show()
+                                                e.printStackTrace()
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                androidx.compose.material3.Surface(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    shape = RoundedCornerShape(20.dp),
+                                    shadowElevation = 4.dp
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Sign In Required", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // App Preferences Menu Button
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(cardBg)
+                            .clickable { settingsScreen = "App" }
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.Settings, contentDescription = null)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text("App Preferences", fontWeight = FontWeight.Medium, fontSize = 16.sp)
+                            }
+                            Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Gray)
+                        }
+                    }
+
+                    if (currentUser != null) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        Button(
+                            onClick = {
+                                showAccountSheet = false
+                                com.arcadesoftware.musix.db.FirestoreSyncManager.pushAllLocalDataToFirestore(context)
+                                com.arcadesoftware.musix.db.FirestoreSyncManager.clearAllLocalData(context)
+                                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+                                com.arcadesoftware.musix.components.ByeAnimManager.trigger()
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFFFF453A) else Color(0xFFFF3B30),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(Icons.Rounded.Logout, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Sign Out")
+                        }
+                    }
+                } else if (settingsScreen == "Cloud") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        IconButton(onClick = { settingsScreen = "Main" }, modifier = Modifier.align(Alignment.CenterStart)) {
+                            Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
+                        }
+                        Text(
+                            text = "Cloud Sync",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1691,8 +1903,8 @@ fun MainScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Sync Liked Songs & Library", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                                Text("Keep liked items and library sync across devices", fontSize = 12.sp, color = Color.Gray)
+                                Text("Sync Library", fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                                Text("Sync liked songs, albums, and artists", fontSize = 12.sp, color = Color.Gray)
                             }
                             com.arcadesoftware.musix.components.LiquidToggle(
                                 selected = { syncLibrary },
@@ -1728,9 +1940,138 @@ fun MainScreen() {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    // App Preferences Card
+                    Button(
+                        onClick = { showDeleteConfirmDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Delete Account", color = Color.White)
+                    }
+
+                    if (showDeleteConfirmDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showDeleteConfirmDialog = false },
+                            title = { Text("Delete Account") },
+                            text = {
+                                Column {
+                                    Text("Type 'Confirm' to delete your account. This action cannot be undone.")
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedTextField(
+                                        value = deleteConfirmText,
+                                        onValueChange = { deleteConfirmText = it },
+                                        label = { Text("Type Confirm") },
+                                        singleLine = true
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        if (deleteConfirmText == "Confirm") {
+                                            currentUser?.delete()?.addOnCompleteListener { task ->
+                                                if (task.isSuccessful) {
+                                                    android.widget.Toast.makeText(context, "Account deleted", android.widget.Toast.LENGTH_SHORT).show()
+                                                    currentUser = null
+                                                    settingsScreen = "Main"
+                                                    showDeleteConfirmDialog = false
+                                                    deleteConfirmText = ""
+                                                } else {
+                                                    android.widget.Toast.makeText(context, "Failed: ${task.exception?.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Please type 'Confirm'", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                ) {
+                                    Text("Delete", color = Color.Red)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        )
+                    }
+                } else if (settingsScreen == "App") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        IconButton(onClick = { settingsScreen = "Main" }, modifier = Modifier.align(Alignment.CenterStart)) {
+                            Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
+                        }
+                        Text(
+                            text = "App Preferences",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+
+                    // Theme Selection
+                    val themePref = LocalThemePreference.current
+                    val setThemePref = LocalThemePreferenceSetter.current
+                    
+                    Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp, start = 8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(cardBg).padding(4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        val options = listOf("System", "Light", "Dark")
+                        options.forEachIndexed { index, title ->
+                            val selected = themePref == index
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { setThemePref(index) }
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = title,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // App Icon Selection
+                    val appIconPref = sharedPrefs.getInt("app_icon_preference", 0)
+                    Text("App Icon", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp, start = 8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(cardBg).padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        val icons = listOf(R.mipmap.ic_launcher, R.mipmap.ic_launcher_dark, R.mipmap.ic_launcher_light)
+                        val iconNames = listOf("Default", "Dark", "Light")
+                        icons.forEachIndexed { index, iconRes ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable {
+                                sharedPrefs.edit().putInt("app_icon_preference", index).apply()
+                                AppIconManager.changeAppIcon(context, index)
+                                android.widget.Toast.makeText(context, "App Icon Updated", android.widget.Toast.LENGTH_SHORT).show()
+                            }) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .border(2.dp, if (appIconPref == index) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(16.dp))
+                                        .background(Color.White)
+                                ) {
+                                    AsyncImage(model = iconRes, contentDescription = iconNames[index], modifier = Modifier.fillMaxSize())
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(iconNames[index], style = MaterialTheme.typography.bodyMedium, fontWeight = if (appIconPref == index) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text("Playback & Downloads", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp, start = 8.dp))
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1739,100 +2080,45 @@ fun MainScreen() {
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = "APP PREFERENCES",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isLightMode) Color.Gray else Color.LightGray,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Remember playback position", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                                Text("Resume playing song from where you left", fontSize = 12.sp, color = Color.Gray)
-                            }
-                            com.arcadesoftware.musix.components.LiquidToggle(
-                                selected = { resumePlayback },
-                                onSelect = { enabled ->
-                                    resumePlayback = enabled
-                                    sharedPrefs.edit().putBoolean("resume_playback", enabled).apply()
-                                    com.arcadesoftware.musix.db.FirestoreSyncManager.schedulePushAllLocalDataToFirestore(context)
-                                },
-                                backdrop = mainBackdrop
-                            )
+                        var rememberPos by remember { mutableStateOf(sharedPrefs.getBoolean("remember_playback_pos", true)) }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Remember Playback Position", fontWeight = FontWeight.Medium)
+                            com.arcadesoftware.musix.components.LiquidToggle(selected = { rememberPos }, backdrop = mainBackdrop, onSelect = {
+                                rememberPos = it
+                                sharedPrefs.edit().putBoolean("remember_playback_pos", it).apply()
+                            })
                         }
-
-                        androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Always shuffle playlist", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                                Text("Always play playlists shuffled by default", fontSize = 12.sp, color = Color.Gray)
-                            }
-                            com.arcadesoftware.musix.components.LiquidToggle(
-                                selected = { alwaysShuffle },
-                                onSelect = { enabled ->
-                                    alwaysShuffle = enabled
-                                    sharedPrefs.edit().putBoolean("always_shuffle", enabled).apply()
-                                    com.arcadesoftware.musix.db.FirestoreSyncManager.schedulePushAllLocalDataToFirestore(context)
-                                },
-                                backdrop = mainBackdrop
-                            )
+                        androidx.compose.material3.Divider(color = Color.Gray.copy(alpha = 0.2f))
+                        
+                        var alwaysShuffle by remember { mutableStateOf(sharedPrefs.getBoolean("always_shuffle", false)) }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Always Shuffle", fontWeight = FontWeight.Medium)
+                            com.arcadesoftware.musix.components.LiquidToggle(selected = { alwaysShuffle }, backdrop = mainBackdrop, onSelect = {
+                                alwaysShuffle = it
+                                sharedPrefs.edit().putBoolean("always_shuffle", it).apply()
+                            })
                         }
-
-                        androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Always download playlist songs", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                                Text("Auto download songs added to user playlists", fontSize = 12.sp, color = Color.Gray)
-                            }
-                            com.arcadesoftware.musix.components.LiquidToggle(
-                                selected = { autoDownloadPlaylists },
-                                onSelect = { enabled ->
-                                    autoDownloadPlaylists = enabled
-                                    sharedPrefs.edit().putBoolean("auto_download_playlists", enabled).apply()
-                                    com.arcadesoftware.musix.db.FirestoreSyncManager.schedulePushAllLocalDataToFirestore(context)
-                                },
-                                backdrop = mainBackdrop
-                            )
+                        androidx.compose.material3.Divider(color = Color.Gray.copy(alpha = 0.2f))
+                        
+                        var autoDownload by remember { mutableStateOf(sharedPrefs.getBoolean("auto_download_playlists", true)) }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Auto Download Playlists", fontWeight = FontWeight.Medium)
+                            com.arcadesoftware.musix.components.LiquidToggle(selected = { autoDownload }, backdrop = mainBackdrop, onSelect = {
+                                autoDownload = it
+                                sharedPrefs.edit().putBoolean("auto_download_playlists", it).apply()
+                            })
                         }
-
-                        androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Download on Wi-Fi only", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                                Text("Restrict downloads to Wi-Fi connections only", fontSize = 12.sp, color = Color.Gray)
-                            }
-                            com.arcadesoftware.musix.components.LiquidToggle(
-                                selected = { wifiOnlyDownload },
-                                onSelect = { enabled ->
-                                    wifiOnlyDownload = enabled
-                                    sharedPrefs.edit().putBoolean("wifi_only_download", enabled).apply()
-                                    com.arcadesoftware.musix.db.FirestoreSyncManager.schedulePushAllLocalDataToFirestore(context)
-                                },
-                                backdrop = mainBackdrop
-                            )
+                        androidx.compose.material3.Divider(color = Color.Gray.copy(alpha = 0.2f))
+                        
+                        var wifiOnly by remember { mutableStateOf(sharedPrefs.getBoolean("download_wifi_only", true)) }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Download on Wi-Fi Only", fontWeight = FontWeight.Medium)
+                            com.arcadesoftware.musix.components.LiquidToggle(selected = { wifiOnly }, backdrop = mainBackdrop, onSelect = {
+                                wifiOnly = it
+                                sharedPrefs.edit().putBoolean("download_wifi_only", it).apply()
+                            })
                         }
                     }
-                }
                 }
                 Spacer(modifier = Modifier.height(48.dp))
             }

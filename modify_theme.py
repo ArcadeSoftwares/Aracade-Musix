@@ -1,59 +1,10 @@
-package com.arcadesoftware.musix.ui.theme
+import re
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
+# 1. Update Theme.kt to animate colors
+with open("app/src/main/java/com/arcadesoftware/musix/ui/theme/Theme.kt", "r") as f:
+    theme_text = f.read()
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
-
-@Composable
-fun MusixTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val targetColorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    
+animated_theme = """
     val primary by androidx.compose.animation.animateColorAsState(targetColorScheme.primary, androidx.compose.animation.core.tween(500))
     val secondary by androidx.compose.animation.animateColorAsState(targetColorScheme.secondary, androidx.compose.animation.core.tween(500))
     val tertiary by androidx.compose.animation.animateColorAsState(targetColorScheme.tertiary, androidx.compose.animation.core.tween(500))
@@ -82,7 +33,7 @@ fun MusixTheme(
     val outlineVariant by androidx.compose.animation.animateColorAsState(targetColorScheme.outlineVariant, androidx.compose.animation.core.tween(500))
     val scrim by androidx.compose.animation.animateColorAsState(targetColorScheme.scrim, androidx.compose.animation.core.tween(500))
 
-    val colorScheme = targetColorScheme.copy(
+    val colorScheme = androidx.compose.material3.ColorScheme(
         primary = primary,
         secondary = secondary,
         tertiary = tertiary,
@@ -111,10 +62,90 @@ fun MusixTheme(
         outlineVariant = outlineVariant,
         scrim = scrim
     )
+"""
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+theme_text = theme_text.replace("val colorScheme = when", "val targetColorScheme = when")
+theme_text = theme_text.replace("MaterialTheme(\n        colorScheme = colorScheme,", animated_theme + "\n    MaterialTheme(\n        colorScheme = colorScheme,")
+with open("app/src/main/java/com/arcadesoftware/musix/ui/theme/Theme.kt", "w") as f:
+    f.write(theme_text)
+
+# 2. Add AppIconManager to MainActivity
+with open("app/src/main/java/com/arcadesoftware/musix/MainActivity.kt", "r") as f:
+    main_text = f.read()
+
+icon_manager = """
+object AppIconManager {
+    fun changeAppIcon(context: android.content.Context, iconIndex: Int) {
+        val pm = context.packageManager
+        val packageName = context.packageName
+
+        val defaultAlias = android.content.ComponentName(context, "$packageName.MainActivityDefault")
+        val darkAlias = android.content.ComponentName(context, "$packageName.MainActivityDark")
+        val lightAlias = android.content.ComponentName(context, "$packageName.MainActivityLight")
+
+        val components = listOf(defaultAlias, darkAlias, lightAlias)
+        val enableComponent = components[iconIndex]
+        
+        components.forEach {
+            pm.setComponentEnabledSetting(
+                it,
+                if (it == enableComponent) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP
+            )
+        }
+    }
 }
+"""
+# Insert before MainActivity class
+main_text = main_text.replace("class MainActivity : ComponentActivity() {", icon_manager + "\nclass MainActivity : ComponentActivity() {")
+
+# 3. Hoist Theme state in MainActivity
+set_content_pattern = "        setContent {\n            MusixTheme {\n                MainScreen()\n            }\n        }"
+set_content_replacement = """        val sharedPrefs = getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        setContent {
+            var themePref by remember { mutableStateOf(sharedPrefs.getInt("theme_preference", 0)) }
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val darkTheme = when (themePref) {
+                1 -> false
+                2 -> true
+                else -> isSystemDark
+            }
+            
+            // Allow MainScreen to update themePref
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalThemePreference provides themePref,
+                LocalThemePreferenceSetter provides { newPref: Int ->
+                    themePref = newPref
+                    sharedPrefs.edit().putInt("theme_preference", newPref).apply()
+                }
+            ) {
+                MusixTheme(darkTheme = darkTheme) {
+                    MainScreen()
+                }
+            }
+        }"""
+main_text = main_text.replace(set_content_pattern, set_content_replacement)
+
+# Add CompositionLocals
+composition_locals = """
+val LocalThemePreference = androidx.compose.runtime.compositionLocalOf<Int> { 0 }
+val LocalThemePreferenceSetter = androidx.compose.runtime.compositionLocalOf<(Int) -> Unit> { {} }
+"""
+main_text = main_text.replace("class MainActivity : ComponentActivity() {", composition_locals + "\nclass MainActivity : ComponentActivity() {")
+
+# 4. Update MainScreen to use LocalThemePreference
+is_light_pattern = "            val isLightMode = !androidx.compose.foundation.isSystemInDarkTheme()\n            val cardBg = if (isLightMode) Color(0xFFF2F2F7) else Color(0xFF1C1C1E)"
+is_light_replacement = """            val themePref = LocalThemePreference.current
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val isLightMode = when (themePref) {
+                1 -> true
+                2 -> false
+                else -> !isSystemDark
+            }
+            val targetCardBg = if (isLightMode) Color(0xFFF2F2F7) else Color(0xFF1C1C1E)
+            val cardBg by androidx.compose.animation.animateColorAsState(targetCardBg, androidx.compose.animation.core.tween(500))"""
+main_text = main_text.replace(is_light_pattern, is_light_replacement)
+
+with open("app/src/main/java/com/arcadesoftware/musix/MainActivity.kt", "w") as f:
+    f.write(main_text)
+
