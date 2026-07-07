@@ -314,73 +314,99 @@ object FirestoreSyncManager {
         }
     }
 
-    fun syncLikedSongs(context: Context) {
+    suspend fun syncLikedSongsSuspend(context: Context) {
         val p = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
         if (!p.getBoolean("sync_library", true)) return
         val ref = userRef() ?: return
         val ids = LikedSongsManager.getLikedSongIds(context).toList()
-        syncScope.launch {
-            try {
-                ref.collection("liked_songs").document("ids").set(mapOf("ids" to ids)).await()
-                val historyList = AppDatabase.getDatabase(context).musicDao().getPlayHistory().first()
-                if (historyList.isNotEmpty()) {
-                    var batch = fs().batch(); var count = 0
-                    for (id in ids) {
-                        val song = historyList.find { it.id == id } ?: continue
-                        batch.set(ref.collection("liked_songs_metadata").document(id), mapOf(
-                            "id" to song.id, "title" to song.title,
-                            "artistName" to song.artistName, "artistId" to song.artistId,
-                            "thumbnailUrl" to song.thumbnailUrl
-                        ))
-                        count++
-                        if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
-                    }
-                    if (count % 400 != 0) batch.commit().await()
-                }
-            } catch (e: Exception) { Log.e(TAG, "syncLikedSongs failed", e) }
-        }
-    }
-
-    fun syncLikedArtists(context: Context) {
-        val p = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
-        if (!p.getBoolean("sync_library", true)) return
-        val ref = userRef() ?: return
-        val artists = LikedArtistsManager.getLikedArtists(context)
-        syncScope.launch {
-            try {
+        try {
+            ref.collection("liked_songs").document("ids").set(mapOf("ids" to ids)).await()
+            val historyList = AppDatabase.getDatabase(context).musicDao().getPlayHistory().first()
+            if (historyList.isNotEmpty()) {
                 var batch = fs().batch(); var count = 0
-                artists.forEach { a ->
-                    a.id?.let { id ->
-                        batch.set(ref.collection("liked_artists").document(id),
-                            mapOf("id" to id, "name" to a.name, "thumbnailUrl" to a.thumbnailUrl))
-                    }
-                    count++
-                    if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
-                }
-                if (count % 400 != 0) batch.commit().await()
-            } catch (e: Exception) { Log.e(TAG, "syncLikedArtists failed", e) }
-        }
-    }
-
-    fun syncLikedPlaylists(context: Context) {
-        val p = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
-        if (!p.getBoolean("sync_library", true)) return
-        val ref = userRef() ?: return
-        val playlists = LikedPlaylistsManager.getLikedPlaylists(context)
-        syncScope.launch {
-            try {
-                var batch = fs().batch(); var count = 0
-                playlists.forEach { pl ->
-                    batch.set(ref.collection("liked_playlists").document(pl.id), mapOf(
-                        "id" to pl.id, "title" to pl.title, "thumbnail" to pl.thumbnail,
-                        "type" to pl.type, "subtitle" to pl.subtitle
+                for (id in ids) {
+                    val song = historyList.find { it.id == id } ?: continue
+                    batch.set(ref.collection("liked_songs_metadata").document(id), mapOf(
+                        "id" to song.id, "title" to song.title,
+                        "artistName" to song.artistName, "artistId" to song.artistId,
+                        "thumbnailUrl" to song.thumbnailUrl
                     ))
                     count++
                     if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
                 }
                 if (count % 400 != 0) batch.commit().await()
-            } catch (e: Exception) { Log.e(TAG, "syncLikedPlaylists failed", e) }
-        }
+            }
+        } catch (e: Exception) { Log.e(TAG, "syncLikedSongsSuspend failed", e) }
+    }
+
+    fun syncLikedSongs(context: Context) {
+        syncScope.launch { syncLikedSongsSuspend(context) }
+    }
+
+    suspend fun syncLikedArtistsSuspend(context: Context) {
+        val p = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!p.getBoolean("sync_library", true)) return
+        val ref = userRef() ?: return
+        val artists = LikedArtistsManager.getLikedArtists(context)
+        try {
+            var batch = fs().batch(); var count = 0
+            artists.forEach { a ->
+                a.id?.let { id ->
+                    batch.set(ref.collection("liked_artists").document(id),
+                        mapOf("id" to id, "name" to a.name, "thumbnailUrl" to a.thumbnailUrl))
+                }
+                count++
+                if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+            }
+            if (count % 400 != 0) batch.commit().await()
+        } catch (e: Exception) { Log.e(TAG, "syncLikedArtistsSuspend failed", e) }
+    }
+
+    fun syncLikedArtists(context: Context) {
+        syncScope.launch { syncLikedArtistsSuspend(context) }
+    }
+
+    suspend fun syncLikedPlaylistsSuspend(context: Context) {
+        val p = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!p.getBoolean("sync_library", true)) return
+        val ref = userRef() ?: return
+        val playlists = LikedPlaylistsManager.getLikedPlaylists(context)
+        try {
+            var batch = fs().batch(); var count = 0
+            playlists.forEach { pl ->
+                batch.set(ref.collection("liked_playlists").document(pl.id), mapOf(
+                    "id" to pl.id, "title" to pl.title, "thumbnail" to pl.thumbnail,
+                    "type" to pl.type, "subtitle" to pl.subtitle
+                ))
+                count++
+                if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+            }
+            if (count % 400 != 0) batch.commit().await()
+        } catch (e: Exception) { Log.e(TAG, "syncLikedPlaylistsSuspend failed", e) }
+    }
+
+    fun syncLikedPlaylists(context: Context) {
+        syncScope.launch { syncLikedPlaylistsSuspend(context) }
+    }
+
+    suspend fun syncHistorySuspend(context: Context) {
+        val p = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        if (!p.getBoolean("sync_history", true)) return
+        val ref = userRef() ?: return
+        try {
+            val history = AppDatabase.getDatabase(context).musicDao().getPlayHistory().first()
+            var batch = fs().batch(); var count = 0
+            history.take(200).forEach { song ->
+                batch.set(ref.collection("history").document(song.id), mapOf(
+                    "id" to song.id, "title" to song.title,
+                    "artistName" to song.artistName, "artistId" to song.artistId,
+                    "thumbnailUrl" to song.thumbnailUrl, "timestamp" to song.timestamp
+                ))
+                count++
+                if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
+            }
+            if (count % 400 != 0) batch.commit().await()
+        } catch (e: Exception) { Log.e(TAG, "syncHistorySuspend failed", e) }
     }
 
     fun syncHistory(context: Context) {
@@ -391,23 +417,7 @@ object FirestoreSyncManager {
             Log.d(TAG, "syncHistory skipped — debounce active"); return
         }
         lastHistorySyncMs = now
-        val ref = userRef() ?: return
-        syncScope.launch {
-            try {
-                val history = AppDatabase.getDatabase(context).musicDao().getPlayHistory().first()
-                var batch = fs().batch(); var count = 0
-                history.take(200).forEach { song ->
-                    batch.set(ref.collection("history").document(song.id), mapOf(
-                        "id" to song.id, "title" to song.title,
-                        "artistName" to song.artistName, "artistId" to song.artistId,
-                        "thumbnailUrl" to song.thumbnailUrl, "timestamp" to song.timestamp
-                    ))
-                    count++
-                    if (count % 400 == 0) { batch.commit().await(); batch = fs().batch() }
-                }
-                if (count % 400 != 0) batch.commit().await()
-            } catch (e: Exception) { Log.e(TAG, "syncHistory failed", e) }
-        }
+        syncScope.launch { syncHistorySuspend(context) }
     }
 
     /**
@@ -421,6 +431,51 @@ object FirestoreSyncManager {
         val db = AppDatabase.getDatabase(context)
         try {
             val playlists = db.musicDao().getPlaylists().first()
+            val localIds = playlists.map { it.id.toString() }.toSet()
+
+            // Fetch current remote playlists to check for deleted ones
+            try {
+                val remoteDocs = ref.collection("playlists").get().await().documents
+                remoteDocs.forEach { doc ->
+                    if (!localIds.contains(doc.id)) {
+                        // This playlist was deleted locally, delete from Firestore
+                        // We must delete the subcollections first or delete them as well
+                        val plRef = ref.collection("playlists").document(doc.id)
+                        
+                        // Delete meta info
+                        try {
+                            plRef.collection("info").document("meta").delete().await()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to delete remote info/meta for deleted playlist ${doc.id}", e)
+                        }
+
+                        // Delete songs collection
+                        try {
+                            val songDocs = plRef.collection("songs").get().await().documents
+                            if (songDocs.isNotEmpty()) {
+                                var batch = fs().batch()
+                                songDocs.forEachIndexed { index, songDoc ->
+                                    batch.delete(plRef.collection("songs").document(songDoc.id))
+                                    if ((index + 1) % 400 == 0) {
+                                        batch.commit().await()
+                                        batch = fs().batch()
+                                    }
+                                }
+                                batch.commit().await()
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to delete remote songs for deleted playlist ${doc.id}", e)
+                        }
+
+                        // Delete the parent document
+                        plRef.delete().await()
+                        Log.d(TAG, "syncPlaylistsSuspend: Deleted remote playlist ${doc.id}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch remote playlists for deletion sync", e)
+            }
+
             playlists.forEach { playlist ->
                 val plRef = ref.collection("playlists").document(playlist.id.toString())
                 plRef.set(mapOf("id" to playlist.id.toString())).await()
