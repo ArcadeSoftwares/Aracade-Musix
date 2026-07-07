@@ -136,6 +136,18 @@ fun AddToPlaylistSheet(
                                     val playlistId = db.musicDao().insertPlaylist(
                                         PlaylistEntity(name = newPlaylistName.trim())
                                     )
+                                     db.musicDao().insertPlayHistory(
+                                         com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                                             id = song.id,
+                                    db.musicDao().insertPlayHistory(
+                                        com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                                            id = song.id,
+                                            title = song.title,
+                                            artistName = song.artistName ?: "Unknown Artist",
+                                            artistId = song.artists?.firstOrNull()?.id,
+                                            thumbnailUrl = song.thumbnail ?: ""
+                                        )
+                                    )
                                     db.musicDao().insertPlaylistSong(
                                         PlaylistSongEntity(
                                             playlistId = playlistId,
@@ -158,6 +170,15 @@ fun AddToPlaylistSheet(
                                 scope.launch(Dispatchers.IO) {
                                     val playlistId = db.musicDao().insertPlaylist(
                                         PlaylistEntity(name = newPlaylistName.trim())
+                                    )
+                                    db.musicDao().insertPlayHistory(
+                                        com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                                            id = song.id,
+                                            title = song.title,
+                                            artistName = song.artistName ?: "Unknown Artist",
+                                            artistId = song.artists?.firstOrNull()?.id,
+                                            thumbnailUrl = song.thumbnail ?: ""
+                                        )
                                     )
                                     db.musicDao().insertPlaylistSong(
                                         PlaylistSongEntity(
@@ -244,6 +265,15 @@ fun AddToPlaylistSheet(
                                     // Guard against duplicate song entries in the same playlist
                                     val alreadyAdded = db.musicDao().isSongInPlaylist(playlist.id, song.id) > 0
                                     if (!alreadyAdded) {
+                                        db.musicDao().insertPlayHistory(
+                                            com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                                                id = song.id,
+                                                title = song.title,
+                                                artistName = song.artistName ?: "Unknown Artist",
+                                                artistId = song.artists?.firstOrNull()?.id,
+                                                thumbnailUrl = song.thumbnail ?: ""
+                                            )
+                                        )
                                         db.musicDao().insertPlaylistSong(
                                             PlaylistSongEntity(
                                                 playlistId = playlist.id,
