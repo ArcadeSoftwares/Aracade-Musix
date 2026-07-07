@@ -1087,7 +1087,15 @@ fun LiquidToggle(
     val trackBackdrop = rememberLayerBackdrop()
 
     Box(
-        modifier,
+        modifier
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null
+            ) {
+                val nextState = !selected()
+                fraction = if (nextState) 1f else 0f
+                onSelect(nextState)
+            },
         contentAlignment = Alignment.CenterStart
     ) {
         Box(
