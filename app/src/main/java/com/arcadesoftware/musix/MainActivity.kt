@@ -4752,6 +4752,26 @@ fun rememberAudioRoute(): AudioRouteInfo {
     return routeInfo
 }
 
+private fun getConnectedBluetoothDeviceName(hasBtConnectPermission: Boolean): String? {
+    if (!hasBtConnectPermission) return null
+    try {
+        val btAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        if (btAdapter != null && btAdapter.isEnabled) {
+            val bondedDevices = btAdapter.bondedDevices
+            for (device in bondedDevices) {
+                try {
+                    val isConnectedMethod = device.javaClass.getMethod("isConnected")
+                    val isConnected = isConnectedMethod.invoke(device) as Boolean
+                    if (isConnected) {
+                        return device.name
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    } catch (e: Exception) {}
+    return null
+}
+
 private fun getAudioRoute(audioManager: android.media.AudioManager, context: Context, hasBtConnectPermission: Boolean): AudioRouteInfo {
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
         try {
@@ -4759,11 +4779,12 @@ private fun getAudioRoute(audioManager: android.media.AudioManager, context: Con
             for (device in devices) {
                 if (device.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
                     device.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
-                    val name = if (hasBtConnectPermission) {
+                    val customName = getConnectedBluetoothDeviceName(hasBtConnectPermission)
+                    val name = customName ?: (if (hasBtConnectPermission) {
                         device.productName?.toString() ?: "Earbuds"
                     } else {
                         "Earbuds"
-                    }
+                    })
                     return AudioRouteInfo(name, RouteType.BLUETOOTH)
                 } else if (device.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
                     device.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES) {
@@ -4777,8 +4798,9 @@ private fun getAudioRoute(audioManager: android.media.AudioManager, context: Con
     val isWired = audioManager.isWiredHeadsetOn
     return when {
         isBluetooth -> {
-            var name = "Earbuds"
-            if (hasBtConnectPermission) {
+            val customName = getConnectedBluetoothDeviceName(hasBtConnectPermission)
+            var name = customName ?: "Earbuds"
+            if (name == "Earbuds" && hasBtConnectPermission) {
                 try {
                     val btAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
                     if (btAdapter != null && btAdapter.isEnabled) {
