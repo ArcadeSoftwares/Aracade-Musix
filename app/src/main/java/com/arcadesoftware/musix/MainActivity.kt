@@ -109,6 +109,7 @@ object PlayerManager {
     val currentQueueIndex = MutableStateFlow(0)
     val autoPlayEnabled = MutableStateFlow(true)
     val activePlaylistDetail = MutableStateFlow<YTItem?>(null)
+    val activeArtistId = MutableStateFlow<String?>(null)
     val activeUserPlaylist = MutableStateFlow<com.arcadesoftware.musix.db.entities.PlaylistEntity?>(null)
     val currentPlayingPlaylist = MutableStateFlow<YTItem?>(null)
     private var appContext: Context? = null
@@ -2532,6 +2533,39 @@ fun MainScreen() {
             }
         }
 
+        // Artist details page overlay
+        val activeArtistId by PlayerManager.activeArtistId.collectAsState()
+        androidx.compose.animation.AnimatedVisibility(
+            visible = activeArtistId != null,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            activeArtistId?.let { artistId ->
+                val dummyArtist = remember(artistId) {
+                    val currentSongItem = PlayerManager.currentSong.value
+                    val artistName = when (currentSongItem) {
+                        is SongItem -> currentSongItem.artists?.firstOrNull()?.name ?: "Artist"
+                        is AlbumItem -> currentSongItem.artists?.firstOrNull()?.name ?: "Artist"
+                        is ArtistItem -> currentSongItem.title
+                        else -> "Artist"
+                    }
+                    com.arcadesoftware.musix.ui.screens.LibraryArtist(
+                        name = artistName,
+                        thumbnailUrl = null,
+                        songs = emptyList(),
+                        id = artistId
+                    )
+                }
+                com.arcadesoftware.musix.ui.screens.ArtistLibraryDetailScreen(
+                    artist = dummyArtist,
+                    backdrop = playlistBackdrop,
+                    onBack = { PlayerManager.activeArtistId.value = null },
+                    onLikedArtistsChanged = {}
+                )
+            }
+        }
+
         androidx.compose.animation.AnimatedVisibility(
             visible = currentSong != null && !showDownloadsScreen,
             modifier = Modifier.align(Alignment.BottomEnd),
@@ -3799,13 +3833,24 @@ fun MiniPlayer(
                                 maxLines = 1,
                                 modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
+                             Text(
                                 subtitle,
-                                color = contentColor.copy(0.7f),
-                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFFA243C),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable {
+                                    val artistId = when (currentSong) {
+                                        is SongItem -> currentSong.artists?.firstOrNull()?.id
+                                        is AlbumItem -> currentSong.artists?.firstOrNull()?.id
+                                        is ArtistItem -> currentSong.id
+                                        else -> null
+                                    }
+                                    if (artistId != null) {
+                                        PlayerManager.activeArtistId.value = artistId
+                                        expanded = false
+                                    }
+                                }
                             )
                         }
                         val context = LocalContext.current
@@ -4107,12 +4152,43 @@ fun MiniPlayer(
                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                                     indication = null
                                 ) {
-                                    showQueue = true
+                            showQueue = true
                                 }
                         )
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
+
+                    val audioRoute = rememberAudioRoute()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = when (audioRoute.type) {
+                                RouteType.BLUETOOTH -> Icons.Rounded.Bluetooth
+                                RouteType.HEADPHONES -> Icons.Rounded.Headphones
+                                else -> Icons.Rounded.VolumeUp
+                            },
+                            contentDescription = null,
+                            tint = contentColor.copy(alpha = 0.5f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when (audioRoute.type) {
+                                RouteType.BLUETOOTH -> "Playing on ${audioRoute.name}"
+                                RouteType.HEADPHONES -> "Playing on Earphones"
+                                else -> "Playing on Phone Speaker"
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = contentColor.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
 
                     // System volume control row at the very bottom
                     val context = LocalContext.current
@@ -4529,5 +4605,71 @@ fun parseMarkdown(text: String): androidx.compose.ui.text.AnnotatedString {
                 append("\n")
             }
         }
+    }
+}
+
+data class AudioRouteInfo(
+    val name: String,
+    val type: RouteType
+)
+
+enum class RouteType {
+    SPEAKER,
+    HEADPHONES,
+    BLUETOOTH,
+    OTHER
+}
+
+@Composable
+fun rememberAudioRoute(): AudioRouteInfo {
+    val context = LocalContext.current
+    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager }
+    var routeInfo by remember { mutableStateOf(getAudioRoute(audioManager, context)) }
+
+    DisposableEffect(context) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: android.content.Intent) {
+                routeInfo = getAudioRoute(audioManager, context)
+            }
+        }
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            addAction(android.content.Intent.ACTION_HEADSET_PLUG)
+            // Listen for ACL Bluetooth events to update when devices connect/disconnect
+            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (e: Exception) {}
+        }
+    }
+
+    return routeInfo
+}
+
+private fun getAudioRoute(audioManager: android.media.AudioManager, context: Context): AudioRouteInfo {
+    val isBluetooth = audioManager.isBluetoothA2dpOn || audioManager.isBluetoothScoOn
+    val isWired = audioManager.isWiredHeadsetOn
+    return when {
+        isBluetooth -> {
+            var name = "Earbuds"
+            try {
+                val btAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                if (btAdapter != null && btAdapter.isEnabled) {
+                    val bonded = btAdapter.bondedDevices
+                    // Retrieve first bonded device name or use default
+                    val device = bonded.firstOrNull()
+                    if (device != null) {
+                        name = device.name ?: "Wireless Earbuds"
+                    }
+                }
+            } catch (e: Exception) {}
+            AudioRouteInfo(name, RouteType.BLUETOOTH)
+        }
+        isWired -> AudioRouteInfo("Earphones", RouteType.HEADPHONES)
+        else -> AudioRouteInfo("Phone Speaker", RouteType.SPEAKER)
     }
 }
