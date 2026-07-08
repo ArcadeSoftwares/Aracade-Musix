@@ -115,21 +115,21 @@ fun WhatsNewDialog(
                         verticalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        // Image Container with rotating glowing border
+                        // Static outer container that defines the border shape
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(262.dp),
+                                .height(262.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(Color(0xFF141416)),
                             contentAlignment = Alignment.Center
                         ) {
-                            // Rotating border
+                            // Rotating background gradient
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(262.dp)
+                                    .fillMaxSize(1.5f) // oversized so it fully covers corners during rotation
                                     .graphicsLayer { rotationZ = rotation }
-                                    .border(
-                                        2.5.dp,
+                                    .background(
                                         androidx.compose.ui.graphics.Brush.sweepGradient(
                                             listOf(
                                                 Color(0xFF00FFFF),
@@ -137,17 +137,15 @@ fun WhatsNewDialog(
                                                 Color(0xFFFFCC00),
                                                 Color(0xFF00FFFF)
                                             )
-                                        ),
-                                        RoundedCornerShape(24.dp)
+                                        )
                                     )
                             )
-                            // Static inner image
+                            // Static inner content overlay (leaves a 2.5.dp border)
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(260.dp)
-                                    .padding(2.dp)
-                                    .clip(RoundedCornerShape(22.dp))
+                                    .fillMaxSize()
+                                    .padding(2.5.dp)
+                                    .clip(RoundedCornerShape(21.5.dp))
                                     .background(Color(0xFF141416)),
                                 contentAlignment = Alignment.Center
                             ) {
