@@ -24,8 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import kotlin.math.absoluteValue
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.window.Dialog
@@ -64,154 +66,192 @@ fun WhatsNewDialog(
     val pagerState = rememberPagerState(pageCount = { features.size })
     val coroutineScope = rememberCoroutineScope()
 
+    var isVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
+    val animateDismiss = {
+        coroutineScope.launch {
+            isVisible = false
+            kotlinx.coroutines.delay(280) // wait for slide-out animation to complete
+            onDismiss()
+        }
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { animateDismiss() },
         properties = androidx.compose.ui.window.DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = false,
             dismissOnClickOutside = false
         )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0A0A0C))
-                .systemBarsPadding()
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInVertically(
+                initialOffsetY = { it / 3 },
+                animationSpec = tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(durationMillis = 350)),
+            exit = slideOutVertically(
+                targetOffsetY = { it / 3 },
+                animationSpec = tween(durationMillis = 280, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+            ) + fadeOut(animationSpec = tween(durationMillis = 280))
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .background(Color(0xFF0A0A0C))
+                    .systemBarsPadding()
             ) {
-                // Header / Title
-                Text(
-                    text = "What's New in Musix",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
-                )
-
-                val infiniteTransition = rememberInfiniteTransition(label = "whats_new_glow")
-                val rotation by infiniteTransition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 360f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = androidx.compose.animation.core.tween(4000, easing = androidx.compose.animation.core.LinearEasing),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Restart
-                    ),
-                    label = "border_rotation"
-                )
-
-                // Pager
-                HorizontalPager(
-                    state = pagerState,
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) { page ->
-                    val feature = features[page]
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        // Image Container with rotating glowing border
-                        Box(
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp, vertical = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Header / Title
+                    Text(
+                        text = "What's New in Musix",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
+                    )
+
+                    val infiniteTransition = rememberInfiniteTransition(label = "whats_new_glow")
+                    val rotation by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                            animation = androidx.compose.animation.core.tween(4000, easing = androidx.compose.animation.core.LinearEasing),
+                            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                        ),
+                        label = "border_rotation"
+                    )
+
+                    // Pager
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) { page ->
+                        val feature = features[page]
+                        
+                        // Page scroll transformation
+                        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+                        val scale = 1f - (pageOffset * 0.15f).coerceIn(0f, 0.15f)
+                        val alpha = 1f - (pageOffset * 0.8f).coerceIn(0f, 0.8f)
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(260.dp)
-                                .rotatingGlowBorder(
-                                    rotation = rotation,
-                                    strokeWidth = 3.dp,
-                                    cornerRadius = 24.dp
-                                )
-                                .padding(3.dp) // padding to prevent image from overlapping border outline
-                                .clip(RoundedCornerShape(21.dp))
-                                .background(Color(0xFF141416)),
-                            contentAlignment = Alignment.Center
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    this.alpha = alpha
+                                }
                         ) {
-                            androidx.compose.foundation.Image(
-                                painter = androidx.compose.ui.res.painterResource(id = feature.imageRes),
-                                contentDescription = feature.title,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
+                            // Image Container with rotating glowing border
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(260.dp)
+                                    .rotatingGlowBorder(
+                                        rotation = rotation,
+                                        strokeWidth = 3.dp,
+                                        cornerRadius = 24.dp
+                                    )
+                                    .padding(3.dp) // padding to prevent image from overlapping border outline
+                                    .clip(RoundedCornerShape(21.dp))
+                                    .background(Color(0xFF141416)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                androidx.compose.foundation.Image(
+                                    painter = androidx.compose.ui.res.painterResource(id = feature.imageRes),
+                                    contentDescription = feature.title,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(32.dp))
+
+                            Text(
+                                text = feature.title,
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = feature.description,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.Gray,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                lineHeight = 22.sp
                             )
                         }
-
-                        Spacer(modifier = Modifier.height(32.dp))
-
-                        Text(
-                            text = feature.title,
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = feature.description,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.Gray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            lineHeight = 22.sp
-                        )
                     }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                // Page Indicator Dots
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    repeat(features.size) { index ->
-                        val isSelected = pagerState.currentPage == index
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 4.dp)
-                                .size(if (isSelected) 10.dp else 8.dp)
-                                .clip(CircleShape)
-                                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f))
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Action Buttons
-                val isLastPage = pagerState.currentPage == features.size - 1
-                Button(
-                    onClick = {
-                        if (isLastPage) {
-                            onDismiss()
-                        } else {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                            }
+                    // Page Indicator Dots
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        repeat(features.size) { index ->
+                            val isSelected = pagerState.currentPage == index
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 4.dp)
+                                    .size(if (isSelected) 10.dp else 8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f))
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text(
-                        text = if (isLastPage) "Get Started" else "Next",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Action Buttons
+                    val isLastPage = pagerState.currentPage == features.size - 1
+                    Button(
+                        onClick = {
+                            if (isLastPage) {
+                                animateDismiss()
+                            } else {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = if (isLastPage) "Get Started" else "Next",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
             }
         }
