@@ -458,11 +458,19 @@ object PlayerManager {
                         androidx.media3.common.Player.STATE_READY -> "READY"
                         androidx.media3.common.Player.STATE_ENDED -> {
                             acquireWakeLock()
+                            val currentMode = repeatMode.value
                             val currentIndex = currentQueueIndex.value
                             val currentQueue = queue.value
-                            if (currentIndex < currentQueue.size - 1) {
+                            if (currentMode == androidx.media3.common.Player.REPEAT_MODE_ONE) {
+                                // Loop current song
+                                playInternal(currentQueue[currentIndex])
+                            } else if (currentIndex < currentQueue.size - 1) {
                                 currentQueueIndex.value = currentIndex + 1
                                 playInternal(currentQueue[currentIndex + 1])
+                            } else if (currentMode == androidx.media3.common.Player.REPEAT_MODE_ALL && currentQueue.isNotEmpty()) {
+                                // Loop forever (repeat entire queue)
+                                currentQueueIndex.value = 0
+                                playInternal(currentQueue[0])
                             } else if (autoPlayEnabled.value) {
                                 currentSong.value?.let { song ->
                                     scope.launch {
