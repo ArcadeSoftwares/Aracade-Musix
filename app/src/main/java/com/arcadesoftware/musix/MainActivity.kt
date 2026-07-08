@@ -1,5 +1,6 @@
 package com.arcadesoftware.musix
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.BlendMode
@@ -3677,6 +3678,28 @@ fun MiniPlayer(
                         )
                     )
 
+                    val artBorderBrush = remember(artRotation) {
+                        object : androidx.compose.ui.graphics.ShaderBrush() {
+                            override fun createShader(size: androidx.compose.ui.geometry.Size): android.graphics.Shader {
+                                val shader = android.graphics.SweepGradient(
+                                    size.width / 2f,
+                                    size.height / 2f,
+                                    intArrayOf(
+                                        Color.Cyan.toArgb(),
+                                        Color.Magenta.toArgb(),
+                                        Color.Yellow.toArgb(),
+                                        Color.Cyan.toArgb()
+                                    ),
+                                    null
+                                )
+                                val matrix = android.graphics.Matrix()
+                                matrix.postRotate(artRotation, size.width / 2f, size.height / 2f)
+                                shader.setLocalMatrix(matrix)
+                                return shader
+                            }
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -3693,21 +3716,13 @@ fun MiniPlayer(
                             modifier = Modifier.fillMaxSize()
                         )
 
-                        // Rotating gradient border box on top
+                        // Static gradient border box with rotating brush on top
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .graphicsLayer { rotationZ = artRotation }
                                 .border(
                                     3.dp,
-                                    androidx.compose.ui.graphics.Brush.sweepGradient(
-                                        listOf(
-                                            Color.Cyan,
-                                            Color.Magenta,
-                                            Color.Yellow,
-                                            Color.Cyan
-                                        )
-                                    ),
+                                    artBorderBrush,
                                     RoundedCornerShape(24.dp)
                                 )
                         )
