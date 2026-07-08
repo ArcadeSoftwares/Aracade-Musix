@@ -58,54 +58,57 @@ fun WhatsNewDialog(
     val pagerState = rememberPagerState(pageCount = { features.size })
     val coroutineScope = rememberCoroutineScope()
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(28.dp)),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF0F0F11)
-            ),
-            shape = RoundedCornerShape(28.dp)
+                .fillMaxSize()
+                .background(Color(0xFF0A0A0C))
+                .systemBarsPadding()
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header
+                // Header / Title
                 Text(
-                    text = "What's New",
-                    style = MaterialTheme.typography.headlineMedium,
+                    text = "What's New in Musix",
+                    style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
                 )
 
                 // Pager
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier
+                        .weight(1f)
                         .fillMaxWidth()
-                        .height(300.dp)
                 ) { page ->
                     val feature = features[page]
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 8.dp)
+                        modifier = Modifier.fillMaxSize()
                     ) {
                         // Image Container with rounded corners
                         Box(
                             modifier = Modifier
-                                .size(140.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(20.dp))
-                                .background(Color(0xFF16161A)),
+                                .fillMaxWidth()
+                                .height(260.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(24.dp))
+                                .background(Color(0xFF141416)),
                             contentAlignment = Alignment.Center
                         ) {
                             coil.compose.AsyncImage(
@@ -116,30 +119,30 @@ fun WhatsNewDialog(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(32.dp))
 
                         Text(
                             text = feature.title,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
                             text = feature.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.LightGray,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.Gray,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 16.dp),
-                            lineHeight = 20.sp
+                            lineHeight = 22.sp
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Page Indicator Dots
                 Row(
@@ -159,7 +162,7 @@ fun WhatsNewDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
                 // Action Buttons
                 val isLastPage = pagerState.currentPage == features.size - 1
@@ -175,8 +178,8 @@ fun WhatsNewDialog(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
+                        .height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
@@ -184,7 +187,7 @@ fun WhatsNewDialog(
                     Text(
                         text = if (isLastPage) "Get Started" else "Next",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
+                        fontSize = 18.sp,
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
