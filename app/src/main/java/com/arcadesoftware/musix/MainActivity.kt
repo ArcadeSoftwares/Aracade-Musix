@@ -469,32 +469,23 @@ object PlayerManager {
                             val currentQueue = queue.value
 
                             if (currentQueue.isEmpty()) {
-                                // Nothing to play
                                 releaseWakeLock()
                                 exoPlayer?.playWhenReady = false
                             } else if (currentMode == androidx.media3.common.Player.REPEAT_MODE_ONE) {
-                                // ── Repeat current song ONCE, then revert to OFF ──
-                                // Works for both single song and any position in a playlist
+                                // Repeat current song once, then revert to OFF
                                 repeatMode.value = androidx.media3.common.Player.REPEAT_MODE_OFF
-                                triggerNotificationUpdate() // refresh icon immediately
+                                triggerNotificationUpdate()
                                 playInternal(currentQueue[currentIndex])
-                            } else if (currentMode == androidx.media3.common.Player.REPEAT_MODE_ALL) {
-                                // ── Loop forever ──
-                                // Single song: currentIndex == size-1 == 0, wraps back to itself
-                                // Playlist: advance through queue; wrap to start at end
-                                if (currentIndex < currentQueue.size - 1) {
-                                    currentQueueIndex.value = currentIndex + 1
-                                    playInternal(currentQueue[currentIndex + 1])
-                                } else {
-                                    currentQueueIndex.value = 0
-                                    playInternal(currentQueue[0])
-                                }
                             } else if (currentIndex < currentQueue.size - 1) {
-                                // ── Normal: advance to next song in queue ──
+                                // Advance to next song in queue (normal & playlist)
                                 currentQueueIndex.value = currentIndex + 1
                                 playInternal(currentQueue[currentIndex + 1])
+                            } else if (currentMode == androidx.media3.common.Player.REPEAT_MODE_ALL && currentQueue.isNotEmpty()) {
+                                // End of queue + loop mode → wrap to first song
+                                currentQueueIndex.value = 0
+                                playInternal(currentQueue[0])
                             } else if (autoPlayEnabled.value) {
-                                // ── End of queue: fetch YouTube autoplay suggestions ──
+                                // End of queue, no loop → fetch YouTube autoplay suggestions
                                 currentSong.value?.let { song ->
                                     scope.launch {
                                         val endpoint = WatchEndpoint(videoId = song.id)
@@ -3525,7 +3516,7 @@ fun MiniPlayer(
                         val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
                         val radius = (size.minDimension - strokeWidth) / 2f
 
-                        // Album art ring: only visible while playing
+                        // Album art ring: rotating rainbow when playing, dim grey circle when paused
                         if (!isRingsDisabled && isPlaying) {
                             rotate(rotationAngle) {
                                 drawCircle(
@@ -3544,6 +3535,13 @@ fun MiniPlayer(
                                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
                                 )
                             }
+                        } else if (!isRingsDisabled) {
+                            drawCircle(
+                                color = contentColor.copy(alpha = 0.15f),
+                                radius = radius,
+                                center = centerOffset,
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+                            )
                         }
                     }
                     Box(
@@ -3616,6 +3614,21 @@ fun MiniPlayer(
                             val strokeWidth = 2.5.dp.toPx()
                             val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
                             val radius = (size.minDimension - strokeWidth) / 2f
+                            val sz = androidx.compose.ui.geometry.Size(size.width - strokeWidth, size.height - strokeWidth)
+                            val arcOffset = androidx.compose.ui.geometry.Offset(strokeWidth / 2f, strokeWidth / 2f)
+
+                            // Animated linear gradient (like slider) — scrolls left to right
+                            val linearBrush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFFFA243C),
+                                    Color(0xFF8B5CF6),
+                                    Color(0xFF06B6D4),
+                                    Color(0xFFEC4899),
+                                    Color(0xFFFA243C)
+                                ),
+                                start = androidx.compose.ui.geometry.Offset.Zero,
+                                end = androidx.compose.ui.geometry.Offset(size.width, size.height)
+                            )
 
                             // Draw background track
                             drawCircle(
@@ -3625,40 +3638,30 @@ fun MiniPlayer(
                                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
                             )
 
-                            val ringBrush = androidx.compose.ui.graphics.Brush.sweepGradient(
-                                colors = listOf(
-                                    Color(0xFFFA243C),
-                                    Color(0xFF8B5CF6),
-                                    Color(0xFF06B6D4),
-                                    Color(0xFFEC4899),
-                                    Color(0xFFFA243C)
-                                ),
-                                center = centerOffset
-                            )
-
-                            if (isPlaying) {
-                                // Rotating full rainbow ring when playing
-                                rotate(rotationAngle) {
-                                    drawCircle(
-                                        brush = ringBrush,
-                                        radius = radius,
-                                        center = centerOffset,
-                                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
-                                    )
-                                }
-                            } else if (playbackProgress > 0f) {
-                                // Static gradient progress arc when paused
+                            if (!isPlaying && playbackProgress > 0f) {
+                                // Dim progress arc underneath showing how far we are
                                 drawArc(
-                                    brush = ringBrush,
+                                    color = contentColor.copy(alpha = 0.35f),
                                     startAngle = -90f,
                                     sweepAngle = playbackProgress * 360f,
                                     useCenter = false,
-                                    topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2f, strokeWidth / 2f),
-                                    size = androidx.compose.ui.geometry.Size(size.width - strokeWidth, size.height - strokeWidth),
+                                    topLeft = arcOffset,
+                                    size = sz,
                                     style = androidx.compose.ui.graphics.drawscope.Stroke(
-                                        width = strokeWidth,
+                                        width = strokeWidth * 1.5f,
                                         cap = androidx.compose.ui.graphics.StrokeCap.Round
                                     )
+                                )
+                            }
+
+                            // Always-rotating rainbow linear gradient ring (playing = full opacity, paused = slightly dim)
+                            rotate(rotationAngle) {
+                                drawCircle(
+                                    brush = linearBrush,
+                                    radius = radius,
+                                    center = centerOffset,
+                                    alpha = if (isPlaying) 1f else 0.7f,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
                                 )
                             }
                         }

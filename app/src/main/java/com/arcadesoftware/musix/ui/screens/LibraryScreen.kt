@@ -1027,7 +1027,7 @@ fun ArtistLibraryDetailScreen(
             }
 
             // Tabs for Library vs Online (if available)
-            if (hasOnlineProfile && displaySongs.isNotEmpty()) {
+            if (hasOnlineProfile) {
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
