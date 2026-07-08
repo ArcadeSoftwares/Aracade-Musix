@@ -279,6 +279,10 @@ fun HomeScreen(
     val recommendations by viewModel.similarRecommendations.collectAsState()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
     
+    val filteredChips = remember(homePage) {
+        homePage?.chips?.filter { !it.title.contains("podcast", ignoreCase = true) }
+    }
+    
     var currentUser by remember { mutableStateOf(com.google.firebase.auth.FirebaseAuth.getInstance().currentUser) }
     LaunchedEffect(Unit) {
         com.google.firebase.auth.FirebaseAuth.getInstance().addAuthStateListener { auth ->
@@ -390,13 +394,13 @@ fun HomeScreen(
                 }
             }
 
-            if (homePage?.chips != null) {
+            if (filteredChips != null && filteredChips.isNotEmpty()) {
                 item {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(homePage!!.chips!!) { chip ->
+                        items(filteredChips) { chip ->
                             FilterChip(
                                 selected = selectedChip == chip,
                                 onClick = { viewModel.toggleChip(chip) },
@@ -774,6 +778,8 @@ fun FeaturedCard(item: YTItem, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xFF141416))
+            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(24.dp))
             .clickable {
                 if (item is PlaylistItem || item is AlbumItem) {
                     PlayerManager.activePlaylistDetail.value = item
