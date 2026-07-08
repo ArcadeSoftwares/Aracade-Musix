@@ -3525,14 +3525,8 @@ fun MiniPlayer(
                         val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
                         val radius = (size.minDimension - strokeWidth) / 2f
 
-                        if (isRingsDisabled) {
-                            drawCircle(
-                                color = contentColor.copy(alpha = 0.15f),
-                                radius = radius,
-                                center = centerOffset,
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
-                            )
-                        } else if (isPlaying) {
+                        // Album art ring: only visible while playing
+                        if (!isRingsDisabled && isPlaying) {
                             rotate(rotationAngle) {
                                 drawCircle(
                                     brush = androidx.compose.ui.graphics.Brush.sweepGradient(
@@ -3548,42 +3542,6 @@ fun MiniPlayer(
                                     radius = radius,
                                     center = centerOffset,
                                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
-                                )
-                            }
-                        } else {
-                            // Dim track ring
-                            drawCircle(
-                                color = contentColor.copy(alpha = 0.12f),
-                                radius = radius,
-                                center = centerOffset,
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
-                            )
-                            // Gradient progress arc (static when paused)
-                            if (playbackProgress > 0f) {
-                                val gradientBrush = androidx.compose.ui.graphics.Brush.sweepGradient(
-                                    colors = listOf(
-                                        Color(0xFFFA243C),
-                                        Color(0xFF8B5CF6),
-                                        Color(0xFF06B6D4),
-                                        Color(0xFFEC4899),
-                                        Color(0xFFFA243C)
-                                    ),
-                                    center = centerOffset
-                                )
-                                drawArc(
-                                    brush = gradientBrush,
-                                    startAngle = -90f,
-                                    sweepAngle = 360f * playbackProgress,
-                                    useCenter = false,
-                                    topLeft = androidx.compose.ui.geometry.Offset(
-                                        centerOffset.x - radius,
-                                        centerOffset.y - radius
-                                    ),
-                                    size = androidx.compose.ui.geometry.Size(radius * 2f, radius * 2f),
-                                    style = androidx.compose.ui.graphics.drawscope.Stroke(
-                                        width = strokeWidth,
-                                        cap = androidx.compose.ui.graphics.StrokeCap.Round
-                                    )
                                 )
                             }
                         }
@@ -3658,7 +3616,7 @@ fun MiniPlayer(
                             val strokeWidth = 2.5.dp.toPx()
                             val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
                             val radius = (size.minDimension - strokeWidth) / 2f
-                            
+
                             // Draw background track
                             drawCircle(
                                 color = contentColor.copy(alpha = 0.15f),
@@ -3666,21 +3624,32 @@ fun MiniPlayer(
                                 center = centerOffset,
                                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
                             )
-                            
-                            // Draw progress arc with gradient
-                            if (playbackProgress > 0f) {
-                                val gradientBrush = androidx.compose.ui.graphics.Brush.sweepGradient(
-                                    colors = listOf(
-                                        Color(0xFFFA243C),
-                                        Color(0xFF8B5CF6),
-                                        Color(0xFF06B6D4),
-                                        Color(0xFFEC4899),
-                                        Color(0xFFFA243C)
-                                    ),
-                                    center = centerOffset
-                                )
+
+                            val ringBrush = androidx.compose.ui.graphics.Brush.sweepGradient(
+                                colors = listOf(
+                                    Color(0xFFFA243C),
+                                    Color(0xFF8B5CF6),
+                                    Color(0xFF06B6D4),
+                                    Color(0xFFEC4899),
+                                    Color(0xFFFA243C)
+                                ),
+                                center = centerOffset
+                            )
+
+                            if (isPlaying) {
+                                // Rotating full rainbow ring when playing
+                                rotate(rotationAngle) {
+                                    drawCircle(
+                                        brush = ringBrush,
+                                        radius = radius,
+                                        center = centerOffset,
+                                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+                                    )
+                                }
+                            } else if (playbackProgress > 0f) {
+                                // Static gradient progress arc when paused
                                 drawArc(
-                                    brush = gradientBrush,
+                                    brush = ringBrush,
                                     startAngle = -90f,
                                     sweepAngle = playbackProgress * 360f,
                                     useCenter = false,
@@ -4194,18 +4163,19 @@ fun MiniPlayer(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val currentRepeatMode by PlayerManager.repeatMode.collectAsState()
-                        Icon(
-                            imageVector = if (currentRepeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                            contentDescription = "Repeat Mode",
-                            tint = if (currentRepeatMode != androidx.media3.common.Player.REPEAT_MODE_OFF) Color(0xFFFA243C) else contentColor.copy(0.4f),
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null
-                                ) { PlayerManager.toggleRepeatMode() }
-                        )
+                        // TODO: Re-enable repeat button once repeat logic is fully verified
+                        // val currentRepeatMode by PlayerManager.repeatMode.collectAsState()
+                        // Icon(
+                        //     imageVector = if (currentRepeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                        //     contentDescription = "Repeat Mode",
+                        //     tint = if (currentRepeatMode != androidx.media3.common.Player.REPEAT_MODE_OFF) Color(0xFFFA243C) else contentColor.copy(0.4f),
+                        //     modifier = Modifier
+                        //         .size(28.dp)
+                        //         .clickable(
+                        //             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        //             indication = null
+                        //         ) { PlayerManager.toggleRepeatMode() }
+                        // )
 
                         var showAddToPlaylist by remember { mutableStateOf(false) }
                         val addSong = currentSong as? SongItem
