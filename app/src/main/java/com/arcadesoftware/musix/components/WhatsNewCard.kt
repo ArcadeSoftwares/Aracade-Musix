@@ -60,6 +60,16 @@ fun WhatsNewDialog(
             title = "Download Center",
             description = "Monitor and manage your background downloads in real time within the Download Center.",
             imageRes = R.drawable.whatsnew_3
+        ),
+        WhatsNewFeature(
+            title = "Redesigned App Layout",
+            description = "Experience a sleek, high-end Apple Music style dark interface with rounded glow borders and custom visual cards.",
+            imageRes = R.drawable.whatsnew_1
+        ),
+        WhatsNewFeature(
+            title = "Bug Fixes & Optimization",
+            description = "Enjoy zero-lag rotating border shaders, authoritative unlike local sync, loop controls, and instant Bluetooth audio routing.",
+            imageRes = R.drawable.whatsnew_3
         )
     )
 
