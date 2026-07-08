@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.window.Dialog
 import com.arcadesoftware.musix.R
 import kotlinx.coroutines.launch
@@ -115,47 +118,27 @@ fun WhatsNewDialog(
                         verticalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        // Static outer container that defines the border shape
+                        // Image Container with rotating glowing border
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(262.dp)
-                                .clip(RoundedCornerShape(24.dp))
+                                .height(260.dp)
+                                .rotatingGlowBorder(
+                                    rotation = rotation,
+                                    strokeWidth = 3.dp,
+                                    cornerRadius = 24.dp
+                                )
+                                .padding(3.dp) // padding to prevent image from overlapping border outline
+                                .clip(RoundedCornerShape(21.dp))
                                 .background(Color(0xFF141416)),
                             contentAlignment = Alignment.Center
                         ) {
-                            // Rotating background gradient
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize(1.5f) // oversized so it fully covers corners during rotation
-                                    .graphicsLayer { rotationZ = rotation }
-                                    .background(
-                                        androidx.compose.ui.graphics.Brush.sweepGradient(
-                                            listOf(
-                                                Color(0xFF00FFFF),
-                                                Color(0xFFFF00FF),
-                                                Color(0xFFFFCC00),
-                                                Color(0xFF00FFFF)
-                                            )
-                                        )
-                                    )
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(id = feature.imageRes),
+                                contentDescription = feature.title,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
-                            // Static inner content overlay (leaves a 2.5.dp border)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(2.5.dp)
-                                    .clip(RoundedCornerShape(21.5.dp))
-                                    .background(Color(0xFF141416)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                androidx.compose.foundation.Image(
-                                    painter = androidx.compose.ui.res.painterResource(id = feature.imageRes),
-                                    contentDescription = feature.title,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
                         }
 
                         Spacer(modifier = Modifier.height(32.dp))
@@ -282,5 +265,56 @@ object WhatsNewChecker {
             0
         }
         sharedPrefs.edit().putInt("last_seen_version_code", currentVersionCode).apply()
+    }
+}
+
+@Composable
+fun Modifier.rotatingGlowBorder(
+    rotation: Float,
+    strokeWidth: androidx.compose.ui.unit.Dp = 2.5.dp,
+    cornerRadius: androidx.compose.ui.unit.Dp = 24.dp
+): Modifier {
+    val colors = listOf(
+        Color(0xFF00FFFF),
+        Color(0xFFFF00FF),
+        Color(0xFFFFCC00),
+        Color(0xFF00FFFF)
+    )
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val strokeWidthPx = with(density) { strokeWidth.toPx() }
+    val cornerRadiusPx = with(density) { cornerRadius.toPx() }
+
+    return this.drawBehind {
+        val width = size.width
+        val height = size.height
+        val centerX = width / 2f
+        val centerY = height / 2f
+
+        val sweepShader = android.graphics.SweepGradient(
+            centerX,
+            centerY,
+            colors.map { it.toArgb() }.toIntArray(),
+            null
+        )
+        val matrix = android.graphics.Matrix()
+        matrix.postRotate(rotation, centerX, centerY)
+        sweepShader.setLocalMatrix(matrix)
+
+        val paint = android.graphics.Paint().apply {
+            isAntiAlias = true
+            shader = sweepShader
+            style = android.graphics.Paint.Style.STROKE
+            this.strokeWidth = strokeWidthPx
+        }
+
+        drawContext.canvas.nativeCanvas.drawRoundRect(
+            strokeWidthPx / 2f,
+            strokeWidthPx / 2f,
+            width - strokeWidthPx / 2f,
+            height - strokeWidthPx / 2f,
+            cornerRadiusPx - strokeWidthPx / 2f,
+            cornerRadiusPx - strokeWidthPx / 2f,
+            paint
+        )
     }
 }
