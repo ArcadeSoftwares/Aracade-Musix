@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -529,37 +530,98 @@ fun PlaylistScreen(
 
     if (showNewPlaylistDialog) {
         var dialogName by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showNewPlaylistDialog = false; dialogName = "" },
-            title = { Text("New Playlist", fontWeight = FontWeight.Bold) },
-            text = {
-                OutlinedTextField(
-                    value = dialogName,
-                    onValueChange = { dialogName = it },
-                    placeholder = { Text("Playlist name") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (dialogName.isNotBlank()) {
-                            viewModel.createPlaylist(dialogName.trim())
-                            showNewPlaylistDialog = false
-                            dialogName = ""
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showNewPlaylistDialog = false; dialogName = "" }
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xFF1C1C1E))
+                    .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(28.dp))
+                    .padding(24.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "New Playlist",
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Enter a name for this playlist.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    TextField(
+                        value = dialogName,
+                        onValueChange = { dialogName = it },
+                        placeholder = { Text("Playlist Title", color = Color.Gray) },
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFF2C2C2E),
+                            unfocusedContainerColor = Color(0xFF2C2C2E),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showNewPlaylistDialog = false; dialogName = "" },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White.copy(alpha = 0.6f)
+                            )
+                        ) {
+                            Text("Cancel", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         }
-                    },
-                    enabled = dialogName.isNotBlank()
-                ) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewPlaylistDialog = false; dialogName = "" }) {
-                    Text("Cancel")
+
+                        Button(
+                            onClick = {
+                                if (dialogName.isNotBlank()) {
+                                    viewModel.createPlaylist(dialogName.trim())
+                                    showNewPlaylistDialog = false
+                                    dialogName = ""
+                                }
+                            },
+                            enabled = dialogName.isNotBlank(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFA243C),
+                                contentColor = Color.White,
+                                disabledContainerColor = Color(0xFFFA243C).copy(alpha = 0.3f),
+                                disabledContentColor = Color.White.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Text("Create", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 
     showAddToPlaylistForSong?.let { song ->
