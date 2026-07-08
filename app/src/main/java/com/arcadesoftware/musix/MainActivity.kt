@@ -462,8 +462,11 @@ object PlayerManager {
                             val currentIndex = currentQueueIndex.value
                             val currentQueue = queue.value
                             if (currentMode == androidx.media3.common.Player.REPEAT_MODE_ONE) {
-                                // Loop current song
+                                // Loop current song once
                                 playInternal(currentQueue[currentIndex])
+                                // Disable repeat once
+                                repeatMode.value = androidx.media3.common.Player.REPEAT_MODE_OFF
+                                exoPlayer?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_OFF
                             } else if (currentIndex < currentQueue.size - 1) {
                                 currentQueueIndex.value = currentIndex + 1
                                 playInternal(currentQueue[currentIndex + 1])
