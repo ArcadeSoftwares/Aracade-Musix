@@ -945,10 +945,10 @@ fun LiquidSlider(
                 val sliderTrackBrush = remember(sliderTrackOffset) {
                     androidx.compose.ui.graphics.Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFFFA243C),
-                            Color(0xFFFF5E3A),
-                            Color(0xFFFA243C),
-                            Color(0xFFFF2A68)
+                            Color.Cyan,
+                            Color.Magenta,
+                            Color.Yellow,
+                            Color.Cyan
                         ),
                         start = androidx.compose.ui.geometry.Offset(-500f + (1000f * sliderTrackOffset), 0f),
                         end = androidx.compose.ui.geometry.Offset(500f + (1000f * sliderTrackOffset), 0f),
