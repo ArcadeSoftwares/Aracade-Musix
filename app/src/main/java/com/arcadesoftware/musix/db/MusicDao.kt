@@ -81,8 +81,8 @@ interface MusicDao {
     @Query("DELETE FROM play_history WHERE id NOT IN (SELECT id FROM play_history ORDER BY timestamp DESC LIMIT :limit)")
     suspend fun trimPlayHistory(limit: Int = 500)
 
-    @Query("DELETE FROM play_history")
-    suspend fun clearPlayHistory()
+    @Query("DELETE FROM play_history WHERE id NOT IN (:likedIds) AND id NOT IN (SELECT songId FROM playlist_songs) AND id NOT IN (SELECT id FROM downloaded_songs)")
+    suspend fun clearPlayHistorySafe(likedIds: List<String>)
 
     /** Check if a song already exists in a playlist (for duplicate prevention). */
     @Query("SELECT COUNT(*) FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")

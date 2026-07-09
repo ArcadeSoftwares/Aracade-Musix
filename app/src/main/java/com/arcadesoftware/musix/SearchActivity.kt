@@ -57,11 +57,7 @@ class SearchActivity : ComponentActivity() {
             val sharedPrefs = getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE)
             val themePref = sharedPrefs.getInt("theme_preference", 0)
             val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
-            val darkTheme = when (themePref) {
-                1 -> false // Light
-                2 -> true  // Dark
-                else -> isSystemDark
-            }
+            val darkTheme = true
             MusixTheme(darkTheme = darkTheme) {
                 SearchScreen(onBack = { finish() })
             }
@@ -260,7 +256,8 @@ fun SearchScreen(onBack: () -> Unit) {
                                         modifier = Modifier.clickable {
                                             scope.launch(Dispatchers.IO) {
                                                 val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(context)
-                                                db.musicDao().clearPlayHistory()
+                                                val likedIds = com.arcadesoftware.musix.db.LikedSongsManager.getLikedSongIds(context).toList()
+                                                db.musicDao().clearPlayHistorySafe(likedIds)
                                             }
                                         }
                                     )
