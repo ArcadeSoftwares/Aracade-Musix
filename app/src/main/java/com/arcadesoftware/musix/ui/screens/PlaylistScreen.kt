@@ -163,7 +163,7 @@ fun PlaylistScreen(
                             fontSize = 38.sp,
                             letterSpacing = (-1).sp
                         ),
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
@@ -205,7 +205,7 @@ fun PlaylistScreen(
                                     "Liked Songs",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
                                 Text(
                                     "${likedSongIds.size} songs",
@@ -246,7 +246,7 @@ fun PlaylistScreen(
                                     "Downloads",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
                                 Text(
                                     "${downloadedSongs.size} songs",
@@ -376,7 +376,7 @@ fun PlaylistScreen(
                     Text(
                         "My Playlists",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     IconButton(
                         onClick = { showNewPlaylistDialog = true },
@@ -552,7 +552,7 @@ fun PlaylistScreen(
                         text = "New Playlist",
                         style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -573,8 +573,8 @@ fun PlaylistScreen(
                             unfocusedContainerColor = Color(0xFF2C2C2E),
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedTextColor = MaterialTheme.colorScheme.onBackground,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onBackground
                         ),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
@@ -594,7 +594,7 @@ fun PlaylistScreen(
                                 .height(50.dp),
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = Color.White.copy(alpha = 0.6f)
+                                contentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                             )
                         ) {
                             Text("Cancel", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -615,9 +615,9 @@ fun PlaylistScreen(
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFFFA243C),
-                                contentColor = Color.White,
+                                contentColor = MaterialTheme.colorScheme.onBackground,
                                 disabledContainerColor = Color(0xFFFA243C).copy(alpha = 0.3f),
-                                disabledContentColor = Color.White.copy(alpha = 0.5f)
+                                disabledContentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                             )
                         ) {
                             Text("Create", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -963,7 +963,7 @@ private fun UserPlaylistDetailScreen(
                                     Icon(
                                         Icons.AutoMirrored.Rounded.VolumeUp,
                                         contentDescription = "Playing",
-                                        tint = Color.White,
+                                        tint = MaterialTheme.colorScheme.onBackground,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -1327,7 +1327,7 @@ private fun PlaylistCard(
                     Icon(
                         Icons.Rounded.DownloadDone,
                         contentDescription = "Downloaded",
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -1345,7 +1345,7 @@ private fun PlaylistCard(
                     Icon(
                         Icons.Rounded.Delete,
                         contentDescription = "Delete",
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -1356,7 +1356,7 @@ private fun PlaylistCard(
             text = title,
             style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1460,7 +1460,7 @@ private fun DownloadedSongRow(
                         Icon(
                             Icons.Rounded.Check,
                             contentDescription = "Downloaded",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.size(10.dp)
                         )
                     }
