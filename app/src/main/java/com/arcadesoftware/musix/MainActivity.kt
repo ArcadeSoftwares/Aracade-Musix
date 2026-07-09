@@ -1449,7 +1449,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val syncPrefs = getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
         PlayerManager.disableAnimatedRings.value = syncPrefs.getBoolean("disable_animated_rings", false)
@@ -1593,6 +1593,7 @@ fun MainScreen() {
     val playlistBackdrop = rememberLayerBackdrop()
     val currentSong by PlayerManager.currentSong.collectAsState()
     val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
+    val activeArtist by PlayerManager.activeArtist.collectAsState()
     val activeUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
     val showBottomBar = activePlaylistDetail == null && activeUserPlaylist == null
 
@@ -1675,6 +1676,22 @@ fun MainScreen() {
     var showCloudSyncPrompt by remember { mutableStateOf(false) }
     var hasPromptedSync by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    androidx.activity.compose.BackHandler(
+        enabled = showAccountSheet || showDownloadsScreen || activePlaylistDetail != null || activeArtist != null || activeUserPlaylist != null
+    ) {
+        if (showAccountSheet) {
+            showAccountSheet = false
+        } else if (showDownloadsScreen) {
+            showDownloadsScreen = false
+        } else if (activePlaylistDetail != null) {
+            PlayerManager.activePlaylistDetail.value = null
+        } else if (activeArtist != null) {
+            PlayerManager.activeArtist.value = null
+        } else if (activeUserPlaylist != null) {
+            PlayerManager.activeUserPlaylist.value = null
+        }
+    }
 
     LaunchedEffect(currentUser, showForceUpdateDialog, showSoftUpdateDialog, showBlockAllAccessDialog) {
         if (currentUser == null && !hasPromptedSync && !showForceUpdateDialog && !showSoftUpdateDialog && !showBlockAllAccessDialog) {
@@ -2607,7 +2624,6 @@ fun MainScreen() {
         }
 
         // Artist details page overlay
-        val activeArtist by PlayerManager.activeArtist.collectAsState()
         androidx.compose.animation.AnimatedVisibility(
             visible = activeArtist != null,
             enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }),
@@ -3293,6 +3309,11 @@ fun MiniPlayer(
 ) {
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var expanded by remember { mutableStateOf(false) }
+    
+    androidx.activity.compose.BackHandler(enabled = expanded) {
+        expanded = false
+    }
+
     var isFab by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
