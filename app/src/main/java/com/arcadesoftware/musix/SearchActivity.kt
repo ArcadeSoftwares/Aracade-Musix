@@ -428,7 +428,7 @@ fun SearchScreen(onBack: () -> Unit) {
     
     // Add to playlist modal
     showAddToPlaylistForSong?.let { song ->
-        AddToPlaylistSheet(
+        com.arcadesoftware.musix.components.AddToPlaylistSheet(
             song = song,
             onDismiss = { showAddToPlaylistForSong = null }
         )
@@ -483,6 +483,14 @@ fun SearchSongRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        IconButton(onClick = onAddClick) {
+            Icon(
+                Icons.Rounded.Add,
+                contentDescription = "Add to Playlist",
+                tint = MaterialTheme.colorScheme.onBackground
             )
         }
 
