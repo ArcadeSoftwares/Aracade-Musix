@@ -1,18 +1,20 @@
 package com.arcadesoftware.musix
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -32,32 +35,33 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
+import com.arcadesoftware.musix.ui.theme.MusixTheme
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
-import com.arcadesoftware.musix.ui.theme.MusixTheme
 import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
-import com.music.innertube.models.YTItem
 import io.github.robinpcrd.cupertino.CupertinoActivityIndicator
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.foundation.border
-import androidx.core.view.WindowCompat
 
 class SearchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-        // Ensure PlayerManager is always initialized, even if MainActivity was never opened
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         PlayerManager.init(applicationContext)
         setContent {
             val sharedPrefs = getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE)
             val themePref = sharedPrefs.getInt("theme_preference", 0)
             val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
-            val darkTheme = true
+            val darkTheme = when (themePref) {
+                1 -> false
+                2 -> true
+                else -> isSystemDark
+            }
             MusixTheme(darkTheme = darkTheme) {
                 SearchScreen(onBack = { finish() })
             }
@@ -72,16 +76,15 @@ fun SearchScreen(onBack: () -> Unit) {
     var results by remember { mutableStateOf<List<SongItem>>(emptyList()) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    
     val currentSong by PlayerManager.currentSong.collectAsState()
-    val isPlaying by PlayerManager.isPlaying.collectAsState()
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val backdrop = rememberLayerBackdrop()
-
-    // Fetch synced history list (from Local SharedPreferences) to show as Search History when query is empty
+    val context = LocalContext.current
+    
     var searchHistoryList by remember { mutableStateOf<List<String>>(emptyList()) }
     var showAddToPlaylistForSong by remember { mutableStateOf<SongItem?>(null) }
-    val context = LocalContext.current
     
     val loadSearchHistory = {
         val prefs = context.getSharedPreferences("search_cache_prefs", android.content.Context.MODE_PRIVATE)
@@ -105,11 +108,11 @@ fun SearchScreen(onBack: () -> Unit) {
             isLoading = true
             addSearchHistory(searchQuery)
             scope.launch(Dispatchers.IO) {
-                val searchResult = YouTube.search(searchQuery, com.music.innertube.YouTube.SearchFilter.FILTER_SONG)
+                val searchResult = YouTube.search(searchQuery, YouTube.SearchFilter.FILTER_SONG)
                 withContext(Dispatchers.Main) {
                     searchResult.onSuccess { result ->
                         results = result.items.filterIsInstance<SongItem>()
-                    }.onFailure { e ->
+                    }.onFailure {
                         results = emptyList()
                     }
                     isLoading = false
@@ -120,12 +123,10 @@ fun SearchScreen(onBack: () -> Unit) {
 
     LaunchedEffect(query) {
         if (query.isNotBlank()) {
-            kotlinx.coroutines.delay(1000) // Debounce for 1 second
-            
-            // Auto search after pause
+            delay(1000)
             isLoading = true
             scope.launch(Dispatchers.IO) {
-                val searchResult = YouTube.search(query, com.music.innertube.YouTube.SearchFilter.FILTER_SONG)
+                val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG)
                 withContext(Dispatchers.Main) {
                     searchResult.onSuccess { result ->
                         results = result.items.filterIsInstance<SongItem>()
@@ -140,12 +141,8 @@ fun SearchScreen(onBack: () -> Unit) {
             results = emptyList()
         }
     }
-
-
     
-    LaunchedEffect(Unit) {
-        loadSearchHistory()
-    }
+    LaunchedEffect(Unit) { loadSearchHistory() }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
@@ -153,251 +150,209 @@ fun SearchScreen(onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(bottom = if (currentSong != null) 92.dp else 0.dp)
         ) {
-            // Spacer for status bar and Search Bar height (44.dp Search Row + 12.dp vertical padding * 2 = 68.dp total top bar block)
-            Spacer(modifier = Modifier.statusBarsPadding().height(68.dp))
-
-                // Results / Suggestions List / History
-                if (isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
+            // New Header Aesthetics
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .layerBackdrop(backdrop)
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f))
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CupertinoActivityIndicator(modifier = Modifier.padding(16.dp))
-                    }
-                } else if (results.isNotEmpty()) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        item {
-                            Text(
-                                text = "Search Results",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        ) {
+                            Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
                         }
-                        items(results) { song ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.3f))
-                                    .border(
-                                        width = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(0.08f),
-                                        shape = RoundedCornerShape(14.dp)
-                                    )
-                            ) {
-                                SearchSongRow(
-                                    song = song,
-                                    onClick = {
-                                        PlayerManager.play(song)
-                                    },
-                                    onAddClick = { showAddToPlaylistForSong = song }
-                                )
-                            }
-                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Search",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
                     }
-                } else if (query.isNotEmpty() && suggestions.isNotEmpty()) {
-                    LazyColumn(
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    // Polished Search Input
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(suggestions) { suggestion ->
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(percent = 50)
+                            ),
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, fontWeight = FontWeight.Medium),
+                        singleLine = true,
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { searchSongs(query) }),
+                        decorationBox = { innerTextField ->
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        query = suggestion
-                                        searchSongs(suggestion)
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = suggestion,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
+                                Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Box(modifier = Modifier.weight(1f)) {
+                                    if (query.isEmpty()) {
+                                        Text("What do you want to listen to?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontSize = 16.sp)
+                                    }
+                                    innerTextField()
+                                }
+                                if (query.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { query = "" },
+                                        modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                                    ) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                    }
+                                }
                             }
                         }
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (searchHistoryList.isNotEmpty()) {
-                            item {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Recent Searches",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                    Text(
-                                        text = "Clear",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.clickable {
-                                            searchHistoryList = emptyList()
-                                            context.getSharedPreferences("search_cache_prefs", android.content.Context.MODE_PRIVATE)
-                                                .edit().remove("search_history").apply()
-                                        }
-                                    )
-                                }
-                            }
-                            
-                            items(searchHistoryList) { historyQuery ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            query = historyQuery
-                                            searchSongs(historyQuery)
-                                        }
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.History,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Text(
-                                        text = historyQuery,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                }
-                            }
-                        } else {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 100.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "Search for songs, artists, or albums",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
-                            }
-                    }
-                }
-            }
-        }
-
-        // Top Bar with Search Input — Overlays on top of the content box
-        // and reads the GPU snapshot of the content box behind it via drawBackdrop().
-        // iOS Styled Top Search bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .height(44.dp) // iOS search height
-                .clip(RoundedCornerShape(10.dp)) // iOS round corner radius
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack, modifier = Modifier.padding(start = 4.dp).size(32.dp)) {
-                Icon(
-                    imageVector = Icons.Rounded.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Icon(
-                imageVector = Icons.Rounded.Search,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(18.dp)
-            )
-
-            androidx.compose.foundation.text.BasicTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp),
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search
-                ),
-                keyboardActions = KeyboardActions(
-                    onSearch = { searchSongs(query) }
-                ),
-                singleLine = true,
-                textStyle = TextStyle(
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 15.sp
-                ),
-                decorationBox = { innerTextField ->
-                    Box(contentAlignment = Alignment.CenterStart) {
-                        if (query.isEmpty()) {
-                            Text(
-                                text = "Search songs, artists...",
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            )
-
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { query = "" }, modifier = Modifier.size(28.dp).padding(end = 4.dp)) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = "Clear",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
+
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    CupertinoActivityIndicator(modifier = Modifier.padding(16.dp))
+                }
+            } else if (results.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Top Results",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                    items(results) { song ->
+                        SearchSongRow(
+                            song = song,
+                            onClick = {
+                                val songList = results.filterIsInstance<SongItem>()
+                                val idx = songList.indexOf(song).takeIf { it >= 0 } ?: 0
+                                PlayerManager.playQueue(songList, idx)
+                            },
+                            onAddClick = { showAddToPlaylistForSong = song }
+                        )
+                    }
+                }
+            } else if (query.isNotEmpty() && suggestions.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(suggestions) { suggestion ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable {
+                                    query = suggestion
+                                    searchSongs(suggestion)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(text = suggestion, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (searchHistoryList.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Recent Searches",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                TextButton(
+                                    onClick = {
+                                        searchHistoryList = emptyList()
+                                        context.getSharedPreferences("search_cache_prefs", android.content.Context.MODE_PRIVATE)
+                                            .edit().remove("search_history").apply()
+                                    }
+                                ) {
+                                    Text(
+                                        text = "Clear",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        items(searchHistoryList) { historyQuery ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                    .clickable {
+                                        query = historyQuery
+                                        searchSongs(historyQuery)
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(text = historyQuery, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(Icons.Rounded.ArrowOutward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    } else {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(top = 100.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Rounded.MusicNote, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(text = "Find your next favorite track", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        // MiniPlayer is a sibling OUTSIDE the layerBackdrop box — it overlays on top
-        // and reads the GPU snapshot of the content box behind it via drawBackdrop().
-        // This matches the MainScreen pattern and eliminates the circular GPU SIGSEGV.
-        androidx.compose.animation.AnimatedVisibility(
+        AnimatedVisibility(
             visible = currentSong != null,
             modifier = Modifier.align(Alignment.BottomEnd),
             enter = slideInVertically(initialOffsetY = { it }),
@@ -411,34 +366,27 @@ fun SearchScreen(onBack: () -> Unit) {
         }
     }
     
-    // Add to playlist modal
     showAddToPlaylistForSong?.let { song ->
-        com.arcadesoftware.musix.components.AddToPlaylistSheet(
-            song = song,
-            onDismiss = { showAddToPlaylistForSong = null }
-        )
+        com.arcadesoftware.musix.components.AddToPlaylistSheet(song = song, onDismiss = { showAddToPlaylistForSong = null })
     }
 }
 
 @Composable
-fun SearchSongRow(
-    song: SongItem,
-    onClick: () -> Unit,
-    onAddClick: () -> Unit = {}
-) {
+fun SearchSongRow(song: SongItem, onClick: () -> Unit, onAddClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(8.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Gray.copy(0.2f))
+                .size(64.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Gray.copy(alpha = 0.2f))
         ) {
             AsyncImage(
                 model = song.thumbnail,
@@ -450,14 +398,12 @@ fun SearchSongRow(
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = song.title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -472,18 +418,11 @@ fun SearchSongRow(
         }
 
         IconButton(onClick = onAddClick) {
-            Icon(
-                Icons.Rounded.Add,
-                contentDescription = "Add to Playlist",
-                tint = MaterialTheme.colorScheme.onBackground
-            )
+            Icon(Icons.Rounded.Add, contentDescription = "Add", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        Icon(
-            imageVector = Icons.Rounded.PlayArrow,
-            contentDescription = "Play",
-            tint = Color(0xFFFA243C), // Apple Music Red
-            modifier = Modifier.padding(12.dp)
-        )
+        IconButton(onClick = onClick) {
+            Icon(Icons.Rounded.PlayArrow, contentDescription = "Play", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+        }
     }
 }

@@ -1721,7 +1721,7 @@ fun MainScreen() {
     if (showAccountSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAccountSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ) {
             var isSigningIn by remember { mutableStateOf(false) }
             val sharedPrefs = context.getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE)
@@ -1763,7 +1763,7 @@ fun MainScreen() {
                 label = "settings_screen_transition"
             ) { screen ->
                 Column(
-                    modifier = Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+                    modifier = Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp).navigationBarsPadding(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (screen == "Main") {
@@ -2376,102 +2376,7 @@ fun MainScreen() {
                                 Icon(Icons.Rounded.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Gray)
                             }
                             
-                            androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
 
-                            // Disable animated rings toggle
-                            var disableAnimatedRings by remember {
-                                mutableStateOf(syncSharedPrefs.getBoolean("disable_animated_rings", false))
-                            }
-                            var useCustomRingColor by remember {
-                                mutableStateOf(syncSharedPrefs.getBoolean("use_custom_ring_color", false))
-                            }
-                            var ringColorIndex by remember {
-                                mutableFloatStateOf(syncSharedPrefs.getFloat("ring_color_index", 0f))
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Disable Glowing Ring Animations", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                                    Text("Turn off rotating color rings on profile & album art to reduce CPU/battery usage", fontSize = 12.sp, color = Color.Gray)
-                                }
-                                com.arcadesoftware.musix.components.LiquidToggle(
-                                    selected = { disableAnimatedRings },
-                                    onSelect = { isChecked ->
-                                        disableAnimatedRings = isChecked
-                                        syncSharedPrefs.edit().putBoolean("disable_animated_rings", isChecked).apply()
-                                        PlayerManager.disableAnimatedRings.value = isChecked
-                                    },
-                                    backdrop = mainBackdrop
-                                )
-                            }
-                            
-                            androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Use Custom Ring Color", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                                    Text("Change the default animated gradient to a custom solid color", fontSize = 12.sp, color = Color.Gray)
-                                }
-                                com.arcadesoftware.musix.components.LiquidToggle(
-                                    selected = { useCustomRingColor },
-                                    onSelect = { isChecked ->
-                                        useCustomRingColor = isChecked
-                                        syncSharedPrefs.edit().putBoolean("use_custom_ring_color", isChecked).apply()
-                                        PlayerManager.useCustomRingColor.value = isChecked
-                                    },
-                                    backdrop = mainBackdrop
-                                )
-                            }
-                            
-                            androidx.compose.animation.AnimatedVisibility(visible = useCustomRingColor) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text("Ring Color Picker", fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 8.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                                .background(Color.hsv(ringColorIndex * 360f, 0.8f, 1f))
-                                        )
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            // Draw the rainbow track
-                                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(8.dp).align(Alignment.Center).clip(RoundedCornerShape(4.dp))) {
-                                                val colors = (0..360 step 60).map { Color.hsv(it.toFloat(), 0.8f, 1f) }
-                                                drawRect(brush = androidx.compose.ui.graphics.Brush.horizontalGradient(colors))
-                                            }
-                                            Slider(
-                                                value = ringColorIndex,
-                                                onValueChange = { 
-                                                    ringColorIndex = it 
-                                                    PlayerManager.ringColorIndex.value = it
-                                                },
-                                                onValueChangeFinished = {
-                                                    syncSharedPrefs.edit().putFloat("ring_color_index", ringColorIndex).apply()
-                                                    com.arcadesoftware.musix.db.FirestoreSyncManager.syncSettings(context)
-                                                },
-                                                valueRange = 0f..1f,
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = androidx.compose.material3.SliderDefaults.colors(
-                                                    thumbColor = Color.White,
-                                                    activeTrackColor = Color.Transparent,
-                                                    inactiveTrackColor = Color.Transparent
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), thickness = 0.5.dp)
 
                             // Collapsible Advanced Settings (Cache controller)
                             var advancedExpanded by remember { mutableStateOf(false) }

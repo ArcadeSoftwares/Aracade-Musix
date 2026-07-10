@@ -33,6 +33,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.window.Dialog
 import com.arcadesoftware.musix.R
 import kotlinx.coroutines.launch
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawscope.rotate
 
 data class WhatsNewFeature(
     val title: String,
@@ -337,8 +339,19 @@ fun Modifier.rotatingGlowBorder(
             )
         )
     }
-    return this
-        .graphicsLayer { rotationZ = rotation }
-        .border(strokeWidth, brush, androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius))
+    return this.drawWithCache {
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth.toPx())
+        val corner = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
+        onDrawWithContent {
+            drawContent()
+            rotate(rotation) {
+                drawRoundRect(
+                    brush = brush,
+                    cornerRadius = corner,
+                    style = stroke
+                )
+            }
+        }
+    }
 }
 

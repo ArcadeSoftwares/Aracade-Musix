@@ -441,7 +441,11 @@ fun HomeScreen(
                                 Column(
                                     modifier = Modifier
                                         .width(100.dp)
-                                        .clickable { PlayerManager.play(songItem) }
+                                        .clickable { 
+                                            val recentSongs = recentlyPlayed.map { r -> r.toSongItem() }
+                                            val idx = recentSongs.indexOfFirst { r -> r.id == songItem.id }.takeIf { it >= 0 } ?: 0
+                                            PlayerManager.playQueue(recentSongs, idx)
+                                        }
                                 ) {
                                     Box(
                                         modifier = Modifier
