@@ -1780,7 +1780,8 @@ fun ProfessionalSplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 44.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
         ) {
             Text(
                 text = "DEVELOPED BY",
@@ -1788,7 +1789,9 @@ fun ProfessionalSplashScreen(
                     letterSpacing = 2.5.sp,
                     fontWeight = FontWeight.SemiBold
                 ),
-                color = Color.White.copy(alpha = 0.4f)
+                color = Color.White.copy(alpha = 0.4f),
+                maxLines = 1,
+                softWrap = false
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -1797,7 +1800,9 @@ fun ProfessionalSplashScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.2.sp
                 ),
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }
