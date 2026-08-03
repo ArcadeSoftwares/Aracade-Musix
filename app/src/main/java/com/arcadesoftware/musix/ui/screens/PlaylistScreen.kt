@@ -852,12 +852,23 @@ private fun UserPlaylistDetailScreen(
                             val currentPlaylist by PlayerManager.currentPlayingPlaylist.collectAsState()
                             val isThisPlaylistPlaying = currentPlaylist?.id == buildYtPlaylistItem().id
                             
+                            val playButtonBg = if (isThisPlaylistPlaying && isPlaying) {
+                                appleRed
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            }
+                            val playButtonContentColor = if (isThisPlaylistPlaying && isPlaying) {
+                                Color.White
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+
                             // Standard Play / Pause button
                             Box(
                                 modifier = Modifier
                                     .weight(1f).height(48.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                    .background(playButtonBg)
                                     .clickable {
                                         if (isThisPlaylistPlaying) {
                                             PlayerManager.togglePlayPause()
@@ -875,13 +886,13 @@ private fun UserPlaylistDetailScreen(
                                     Icon(
                                         imageVector = if (isThisPlaylistPlaying && isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                         contentDescription = null,
-                                        tint = appleRed,
+                                        tint = playButtonContentColor,
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = if (isThisPlaylistPlaying && isPlaying) "Pause" else "Play",
-                                        color = appleRed,
+                                        color = playButtonContentColor,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
                                     )
