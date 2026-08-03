@@ -44,7 +44,7 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.kyant.backdrop.catalog.components.LiquidButton
+import com.arcadesoftware.musix.components.LiquidButton
 import com.music.innertube.YouTube
 import com.music.innertube.models.*
 import io.github.robinpcrd.cupertino.CupertinoActivityIndicator
