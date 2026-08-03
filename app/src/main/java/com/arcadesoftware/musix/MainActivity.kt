@@ -82,7 +82,9 @@ import com.arcadesoftware.musix.updater.MusixUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.music.innertube.models.YTItem
 import coil.compose.AsyncImage
+import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
+
 import com.music.innertube.models.*
 import com.music.innertube.YouTube
 import androidx.media3.exoplayer.ExoPlayer
@@ -1622,7 +1624,7 @@ fun ProfessionalSplashScreen(
     onSplashFinished: () -> Unit
 ) {
     val context = LocalContext.current
-    
+
     val icons = remember {
         listOf(
             R.mipmap.ic_iconic,
@@ -1648,164 +1650,87 @@ fun ProfessionalSplashScreen(
         }
         value = index
     }
-    
+
     val currentIconRes = icons.getOrElse(selectedIconIndex) { R.mipmap.ic_iconic }
 
-    var startAnimation by remember { mutableStateOf(false) }
+    // startAnimation = true immediately so the fade-in begins the moment the
+    // composable enters the composition (i.e. right on boot).
+    var startAnimation by remember { mutableStateOf(true) }
     var isFadingOut by remember { mutableStateOf(false) }
 
     val alphaAnim by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (isFadingOut) 0f else if (startAnimation) 1f else 0f,
-        animationSpec = tween(durationMillis = 600, easing = LinearEasing),
+        targetValue = if (isFadingOut) 0f else 1f,
+        animationSpec = tween(durationMillis = 500, easing = LinearEasing),
         label = "splashAlpha"
     )
 
     val scaleAnim by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0.75f,
-        animationSpec = tween(durationMillis = 800, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        targetValue = if (startAnimation) 1f else 0.85f,
+        animationSpec = tween(durationMillis = 600, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "splashScale"
     )
 
-    val infiniteTransition = rememberInfiniteTransition(label = "splashGlow")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.75f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-        ),
-        label = "glowAlpha"
-    )
-
     LaunchedEffect(Unit) {
-        startAnimation = true
+        // Hold the splash for 1.8 s then fade out
         kotlinx.coroutines.delay(1800)
         isFadingOut = true
-        kotlinx.coroutines.delay(600)
+        kotlinx.coroutines.delay(500)
         onSplashFinished()
     }
+
+    // Pure black for dark theme, pure white for light theme
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val bgColor = if (isDark) Color.Black else Color.White
+    val textColor = if (isDark) Color.White.copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.65f)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0D0E15))
-            .graphicsLayer { alpha = alphaAnim }
+            .background(bgColor)
             .pointerInput(Unit) {},
         contentAlignment = Alignment.Center
     ) {
-        // Glowing Ambient Background Blur
+        // Logo + text share the same alpha so they always appear/disappear together.
+        // Use synchronous Image (painterResource) so the image is available on the
+        // very first frame — no async decode means no "text before image" glitch.
         Box(
             modifier = Modifier
-                .size(240.dp)
-                .graphicsLayer {
-                    scaleX = scaleAnim * pulseScale * 1.3f
-                    scaleY = scaleAnim * pulseScale * 1.3f
-                    alpha = glowAlpha
-                }
-                .clip(CircleShape)
-                .background(
-                    androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
-        // Main Icon & Title Content (Icon presented first)
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .graphicsLayer {
-                    scaleX = scaleAnim * pulseScale
-                    scaleY = scaleAnim * pulseScale
-                }
+                .fillMaxSize()
+                .graphicsLayer { alpha = alphaAnim },
+            contentAlignment = Alignment.Center
         ) {
-            Box(
+            Image(
+                painter = androidx.compose.ui.res.painterResource(id = currentIconRes),
+                contentDescription = "App Logo",
                 modifier = Modifier
-                    .size(110.dp)
-                    .clip(RoundedCornerShape(26.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
-                    .border(
-                        width = 2.dp,
-                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.tertiary
-                            )
-                        ),
-                        shape = RoundedCornerShape(26.dp)
-                    )
-                    .padding(14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = currentIconRes,
-                    contentDescription = "App Icon",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(16.dp)),
-                    contentScale = ContentScale.Fit
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "MUSIX",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 6.sp,
-                    fontSize = 32.sp
-                ),
-                color = Color.White
+                    .size(120.dp)
+                    .graphicsLayer {
+                        scaleX = scaleAnim
+                        scaleY = scaleAnim
+                    }
+                    .clip(RoundedCornerShape(28.dp)),
+                contentScale = ContentScale.Fit
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
-
+            // Bottom title: "Arcade Software"
             Text(
-                text = "Premium Music Experience",
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    letterSpacing = 2.sp,
-                    fontWeight = FontWeight.Medium
-                ),
-                color = Color.White.copy(alpha = 0.6f)
-            )
-        }
-
-        // Author / Publisher Branding Footer in Clean White Text without "DEVELOPED BY"
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 28.dp, start = 16.dp, end = 16.dp)
-        ) {
-            Text(
-                text = "Arcade Softwares",
+                text = "Arcade Software",
                 style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.5.sp
                 ),
-                color = Color.White,
+                color = textColor,
                 maxLines = 1,
-                softWrap = false
+                softWrap = false,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 32.dp)
             )
         }
     }
 }
+
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
