@@ -960,7 +960,7 @@ fun LiquidSlider(
                     )
                 }
 
-                val isRingsDisabled by com.arcadesoftware.musix.ui.activities.PlayerManager.disableAnimatedRings.collectAsState()
+                val isRingsDisabled by com.arcadesoftware.musix.PlayerManager.disableAnimatedRings.collectAsState()
                 Box(
                     Modifier
                         .clip(CircleShape)

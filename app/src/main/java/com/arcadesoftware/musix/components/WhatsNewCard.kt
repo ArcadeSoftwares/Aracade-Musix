@@ -278,7 +278,7 @@ object WhatsNewChecker {
     fun shouldShowWhatsNew(context: Context): Boolean {
         // FOR TESTING: Returns true unconditionally so you can preview and test.
         // Set to false when moving to production/final.
-        val testingMode = false
+        val testingMode = true
         if (testingMode) return true
 
         val sharedPrefs = context.getSharedPreferences("whats_new_prefs", Context.MODE_PRIVATE)
@@ -326,32 +326,48 @@ fun Modifier.rotatingGlowBorder(
     strokeWidth: androidx.compose.ui.unit.Dp = 2.5.dp,
     cornerRadius: androidx.compose.ui.unit.Dp = 24.dp
 ): Modifier {
-    // Use Compose Brush.sweepGradient (created once via remember, not per-frame) and apply
-    // rotation via graphicsLayer. This avoids recreating a native SweepGradient shader on
-    // every animation frame, which caused SIGSEGV crashes in RenderThread.
-    val brush = remember {
-        androidx.compose.ui.graphics.Brush.sweepGradient(
-            colors = listOf(
-                Color(0xFF00FFFF),
-                Color(0xFFFF00FF),
-                Color(0xFFFFCC00),
-                Color(0xFF00FFFF)
-            )
+    val baseColors = remember {
+        listOf(
+            Color(0xFF00FFFF),
+            Color(0xFFFF00FF),
+            Color(0xFFFFCC00),
+            Color(0xFF00FFFF)
         )
     }
     return this.drawWithCache {
         val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth.toPx())
         val corner = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
+        val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
         onDrawWithContent {
             drawContent()
-            rotate(rotation) {
-                drawRoundRect(
-                    brush = brush,
-                    cornerRadius = corner,
-                    style = stroke
-                )
-            }
+            // Shift colors dynamically along the sweep gradient path based on normalized rotation (0..1)
+            val fraction = (rotation % 360f) / 360f
+            // Interpolate colors array to shift gradient circularly
+            val shiftedColors = listOf(
+                lerpColor(baseColors[0], baseColors[1], fraction),
+                lerpColor(baseColors[1], baseColors[2], fraction),
+                lerpColor(baseColors[2], baseColors[3], fraction),
+                lerpColor(baseColors[0], baseColors[1], fraction)
+            )
+            val brush = androidx.compose.ui.graphics.Brush.sweepGradient(
+                colors = shiftedColors,
+                center = centerOffset
+            )
+            drawRoundRect(
+                brush = brush,
+                cornerRadius = corner,
+                style = stroke
+            )
         }
     }
+}
+
+private fun lerpColor(start: Color, stop: Color, fraction: Float): Color {
+    return Color(
+        red = start.red + (stop.red - start.red) * fraction,
+        green = start.green + (stop.green - start.green) * fraction,
+        blue = start.blue + (stop.blue - start.blue) * fraction,
+        alpha = start.alpha + (stop.alpha - start.alpha) * fraction
+    )
 }
 

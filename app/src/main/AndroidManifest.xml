@@ -25,7 +25,7 @@
             android:foregroundServiceType="mediaPlayback" />
 
         <activity
-            android:name=".ui.activities.MainActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.Musix">
@@ -37,7 +37,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_iconic"
             android:roundIcon="@mipmap/ic_iconic"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -50,7 +50,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_bluegradient"
             android:roundIcon="@mipmap/ic_launcher_bluegradient"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -63,7 +63,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_comic1"
             android:roundIcon="@mipmap/ic_launcher_comic1"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -76,7 +76,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_gradient2"
             android:roundIcon="@mipmap/ic_launcher_gradient2"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -89,7 +89,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_mini1"
             android:roundIcon="@mipmap/ic_launcher_mini1"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -102,7 +102,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_orange"
             android:roundIcon="@mipmap/ic_launcher_orange"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -115,7 +115,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_special1"
             android:roundIcon="@mipmap/ic_launcher_special1"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -128,7 +128,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_sketch"
             android:roundIcon="@mipmap/ic_launcher_sketch"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -141,7 +141,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_launcher_3dsoft"
             android:roundIcon="@mipmap/ic_launcher_3dsoft"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -154,19 +154,19 @@
             android:exported="true"
             android:icon="@mipmap/ic_icon3dsoft"
             android:roundIcon="@mipmap/ic_icon3dsoft"
-            android:targetActivity=".ui.activities.MainActivity">
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
         <activity
-            android:name=".ui.activities.SearchActivity"
+            android:name=".SearchActivity"
             android:exported="false"
             android:theme="@style/Theme.Musix" />
             
         <activity
-            android:name=".ui.activities.SettingsActivity"
+            android:name=".SettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.Musix" />
     </application>

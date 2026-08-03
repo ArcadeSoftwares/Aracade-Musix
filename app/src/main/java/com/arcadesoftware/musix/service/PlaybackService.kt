@@ -1,6 +1,6 @@
 package com.arcadesoftware.musix.service
 
-import com.arcadesoftware.musix.ui.activities.PlayerManager
+import com.arcadesoftware.musix.PlayerManager
 
 import android.app.Notification
 import android.app.NotificationChannel

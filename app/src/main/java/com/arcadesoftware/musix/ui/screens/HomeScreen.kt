@@ -48,7 +48,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.arcadesoftware.musix.ui.activities.PlayerManager
+import com.arcadesoftware.musix.PlayerManager
 import com.arcadesoftware.musix.data.HomeCacheManager
 import com.arcadesoftware.musix.models.SimilarRecommendation
 import com.music.innertube.YouTube
@@ -357,7 +357,7 @@ fun HomeScreen(
 
                         IconButton(onClick = onOpenDrawer) {
                             if (currentUser != null && currentUser?.photoUrl != null) {
-                                val isRingsDisabled by com.arcadesoftware.musix.ui.activities.PlayerManager.disableAnimatedRings.collectAsState()
+                                val isRingsDisabled by com.arcadesoftware.musix.PlayerManager.disableAnimatedRings.collectAsState()
                                 val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
                                 val rotation = if (isRingsDisabled) {
                                     0f

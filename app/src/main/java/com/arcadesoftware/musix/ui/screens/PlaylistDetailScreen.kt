@@ -35,7 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.arcadesoftware.musix.ui.activities.PlayerManager
+import com.arcadesoftware.musix.PlayerManager
 import com.arcadesoftware.musix.db.LikedPlaylistsManager
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
@@ -168,7 +168,7 @@ fun PlaylistDetailScreen(
                         val playlistEntity = db.musicDao().getPlaylists().first().find { it.id == playlistId }
                         Pair(songs, playlistEntity?.name ?: "Custom Playlist")
                     } else if (id.startsWith("artist_lib_") || id.startsWith("artist_section_") || id.startsWith("local_")) {
-                        Pair(com.arcadesoftware.musix.ui.activities.PlayerManager.queue.value as List<com.music.innertube.models.SongItem>, "Playing from Queue")
+                        Pair(com.arcadesoftware.musix.PlayerManager.queue.value as List<com.music.innertube.models.SongItem>, "Playing from Queue")
                     } else {
                         com.music.innertube.YouTube.playlist(id).getOrNull()?.let { Pair(it.songs as List<com.music.innertube.models.SongItem>, null) }
                     }

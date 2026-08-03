@@ -1,4 +1,4 @@
-package com.arcadesoftware.musix.ui.activities
+package com.arcadesoftware.musix
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

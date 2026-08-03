@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.arcadesoftware.musix.ui.activities.PlayerManager
+import com.arcadesoftware.musix.PlayerManager
 import com.arcadesoftware.musix.db.LikedSongsManager
 import com.arcadesoftware.musix.db.entities.DownloadedSongEntity
 import com.music.innertube.models.*
@@ -961,7 +961,7 @@ fun ArtistLibraryDetailScreen(
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)
             ) {
-                val isRingsDisabled by com.arcadesoftware.musix.ui.activities.PlayerManager.disableAnimatedRings.collectAsState()
+                val isRingsDisabled by com.arcadesoftware.musix.PlayerManager.disableAnimatedRings.collectAsState()
                 val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
                 val rotation = if (isRingsDisabled) {
                     0f

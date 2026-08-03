@@ -1,4 +1,4 @@
-package com.arcadesoftware.musix.ui.activities
+package com.arcadesoftware.musix
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
