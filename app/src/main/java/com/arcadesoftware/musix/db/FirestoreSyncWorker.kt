@@ -10,7 +10,7 @@ import androidx.work.WorkerParameters
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.arcadesoftware.musix.HomeCacheManager
+import com.arcadesoftware.musix.data.HomeCacheManager
 import com.arcadesoftware.musix.db.entities.PlaylistEntity
 import com.arcadesoftware.musix.db.entities.PlaylistSongEntity
 import kotlinx.coroutines.flow.first

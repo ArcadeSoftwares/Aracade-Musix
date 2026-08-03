@@ -25,7 +25,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreVert
 import coil.compose.AsyncImage
-import com.arcadesoftware.musix.PlayerManager
+import com.arcadesoftware.musix.ui.activities.PlayerManager
 import com.arcadesoftware.musix.db.AppDatabase
 import com.arcadesoftware.musix.db.entities.DownloadedSongEntity
 import com.music.innertube.models.Artist

@@ -48,7 +48,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.arcadesoftware.musix.PlayerManager
+import com.arcadesoftware.musix.ui.activities.PlayerManager
+import com.arcadesoftware.musix.data.HomeCacheManager
 import com.arcadesoftware.musix.models.SimilarRecommendation
 import com.music.innertube.YouTube
 import com.music.innertube.models.AlbumItem
@@ -92,7 +93,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadHome() {
         viewModelScope.launch(Dispatchers.IO) {
-            val (cachedHome, cachedRecs) = com.arcadesoftware.musix.HomeCacheManager.load(getApplication())
+            val (cachedHome, cachedRecs) = HomeCacheManager.load(getApplication())
             if (cachedHome != null) {
                 _homePage.value = cachedHome
                 similarRecommendations.value = cachedRecs
@@ -121,13 +122,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     val shuffledRecs = newRecommendations.shuffled()
                     similarRecommendations.value = shuffledRecs
-                    com.arcadesoftware.musix.HomeCacheManager.save(getApplication(), _homePage.value, shuffledRecs)
+                    HomeCacheManager.save(getApplication(), _homePage.value, shuffledRecs)
                 }
                 
                 val result = YouTube.home()
                 result.onSuccess {
                     _homePage.value = it
-                    com.arcadesoftware.musix.HomeCacheManager.save(getApplication(), it, similarRecommendations.value)
+                    HomeCacheManager.save(getApplication(), it, similarRecommendations.value)
                 }
                 _isLoading.value = false
             }
@@ -140,7 +141,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val prefs = context.getSharedPreferences("recommendations_prefs", android.content.Context.MODE_PRIVATE)
             val lastUpdateTime = prefs.getLong("last_update_time", 0L)
             val currentTime = System.currentTimeMillis()
-            val (cachedHome, cachedRecs) = com.arcadesoftware.musix.HomeCacheManager.load(context)
+            val (cachedHome, cachedRecs) = HomeCacheManager.load(context)
             
             val shouldUpdateRecs = cachedRecs.isEmpty() || (currentTime - lastUpdateTime > 24 * 60 * 60 * 1000L)
             
@@ -169,7 +170,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             result.onSuccess { freshHome ->
                 _homePage.value = freshHome
                 similarRecommendations.value = shuffledRecs
-                com.arcadesoftware.musix.HomeCacheManager.save(context, freshHome, shuffledRecs)
+                HomeCacheManager.save(context, freshHome, shuffledRecs)
             }
         } catch (e: Exception) {
             android.util.Log.e("HomeViewModel", "Failed to refresh content silently", e)
@@ -201,13 +202,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 prefs.edit().putLong("last_update_time", System.currentTimeMillis()).apply()
 
                 similarRecommendations.value = shuffledRecs
-                com.arcadesoftware.musix.HomeCacheManager.save(getApplication(), _homePage.value, shuffledRecs)
+                HomeCacheManager.save(getApplication(), _homePage.value, shuffledRecs)
             }
             
             val result = YouTube.home()
             result.onSuccess {
                 _homePage.value = it
-                com.arcadesoftware.musix.HomeCacheManager.save(getApplication(), it, similarRecommendations.value)
+                HomeCacheManager.save(getApplication(), it, similarRecommendations.value)
             }
             _isLoading.value = false
         }
@@ -356,7 +357,7 @@ fun HomeScreen(
 
                         IconButton(onClick = onOpenDrawer) {
                             if (currentUser != null && currentUser?.photoUrl != null) {
-                                val isRingsDisabled by com.arcadesoftware.musix.PlayerManager.disableAnimatedRings.collectAsState()
+                                val isRingsDisabled by com.arcadesoftware.musix.ui.activities.PlayerManager.disableAnimatedRings.collectAsState()
                                 val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
                                 val rotation = if (isRingsDisabled) {
                                     0f

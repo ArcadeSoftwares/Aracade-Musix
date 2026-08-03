@@ -2,7 +2,7 @@ package com.arcadesoftware.musix.db
 
 import android.content.Context
 import android.util.Log
-import com.arcadesoftware.musix.HomeCacheManager
+import com.arcadesoftware.musix.data.HomeCacheManager
 import com.arcadesoftware.musix.db.entities.PlayHistoryEntity
 import com.arcadesoftware.musix.db.entities.PlaylistEntity
 import com.arcadesoftware.musix.db.entities.PlaylistSongEntity

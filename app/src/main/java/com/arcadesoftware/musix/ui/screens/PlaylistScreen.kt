@@ -40,7 +40,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.arcadesoftware.musix.PlayerManager
+import com.arcadesoftware.musix.ui.activities.PlayerManager
 import com.arcadesoftware.musix.db.AppDatabase
 import com.arcadesoftware.musix.db.LikedPlaylistsManager
 import com.arcadesoftware.musix.db.LikedSongsManager

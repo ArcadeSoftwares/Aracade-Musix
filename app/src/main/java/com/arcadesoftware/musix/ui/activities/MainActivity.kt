@@ -1,4 +1,4 @@
-package com.arcadesoftware.musix
+package com.arcadesoftware.musix.ui.activities
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
@@ -49,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arcadesoftware.musix.R
+import com.arcadesoftware.musix.service.PlaybackService
 import com.arcadesoftware.musix.ui.theme.MusixTheme
 import com.kyant.backdrop.catalog.components.LiquidBottomTab
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -1266,35 +1268,35 @@ object PlayerManager {
         }
 
         val playIntent = android.app.PendingIntent.getService(
-            context, 0, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_PLAY),
+            context, 0, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_PLAY),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val pauseIntent = android.app.PendingIntent.getService(
-            context, 1, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_PAUSE),
+            context, 1, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_PAUSE),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val prevIntent = android.app.PendingIntent.getService(
-            context, 2, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_PREVIOUS),
+            context, 2, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_PREVIOUS),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val nextIntent = android.app.PendingIntent.getService(
-            context, 3, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_NEXT),
+            context, 3, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_NEXT),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val dismissIntent = android.app.PendingIntent.getService(
-            context, 5, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_DISMISS),
+            context, 5, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_DISMISS),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val likeIntent = android.app.PendingIntent.getService(
-            context, 6, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_LIKE),
+            context, 6, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_LIKE),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val rewindIntent = android.app.PendingIntent.getService(
-            context, 7, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_REWIND_10),
+            context, 7, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_REWIND_10),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val forwardIntent = android.app.PendingIntent.getService(
-            context, 8, android.content.Intent(context, com.arcadesoftware.musix.PlaybackService::class.java).setAction(ACTION_FORWARD_10),
+            context, 8, android.content.Intent(context, com.arcadesoftware.musix.service.PlaybackService::class.java).setAction(ACTION_FORWARD_10),
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -1375,7 +1377,7 @@ object PlayerManager {
                 android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU
             ) {
                 val notification = builder.build()
-                com.arcadesoftware.musix.PlaybackService.instance?.let { service ->
+                com.arcadesoftware.musix.service.PlaybackService.instance?.let { service ->
                     service.updateForegroundNotification(notification, isForegroundRequired)
                 } ?: run {
                     notificationManager.notify(1001, notification)

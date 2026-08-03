@@ -1,4 +1,4 @@
-package com.arcadesoftware.musix
+package com.arcadesoftware.musix.data
 
 import android.content.Context
 import com.arcadesoftware.musix.models.SimilarRecommendation
