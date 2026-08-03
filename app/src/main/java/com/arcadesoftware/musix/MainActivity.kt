@@ -1640,7 +1640,9 @@ fun ProfessionalSplashScreen(
         )
     }
 
-    val selectedIconIndex by produceState(initialValue = 0) {
+    // Read SharedPreferences synchronously so the correct icon is available
+    // on the very first frame — no async gap, no flash of the wrong icon.
+    val currentIconRes = remember {
         val prefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
         val appPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         val index = if (prefs.contains("app_icon_preference")) {
@@ -1648,86 +1650,148 @@ fun ProfessionalSplashScreen(
         } else {
             appPrefs.getInt("app_icon_preference", 0)
         }
-        value = index
+        icons.getOrElse(index) { R.mipmap.ic_iconic }
     }
 
-    val currentIconRes = icons.getOrElse(selectedIconIndex) { R.mipmap.ic_iconic }
-
-    // startAnimation = true immediately so the fade-in begins the moment the
-    // composable enters the composition (i.e. right on boot).
-    var startAnimation by remember { mutableStateOf(true) }
+    // ── Animation state ────────────────────────────────────────────────────
+    var entered   by remember { mutableStateOf(false) }
     var isFadingOut by remember { mutableStateOf(false) }
 
-    val alphaAnim by androidx.compose.animation.core.animateFloatAsState(
+    // Overall container fade-out
+    val containerAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isFadingOut) 0f else 1f,
-        animationSpec = tween(durationMillis = 500, easing = LinearEasing),
-        label = "splashAlpha"
+        animationSpec = tween(durationMillis = 450, easing = LinearEasing),
+        label = "containerAlpha"
     )
 
-    val scaleAnim by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0.85f,
-        animationSpec = tween(durationMillis = 600, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-        label = "splashScale"
+    // Logo: scale springs in from 0.55 → 1.0
+    val logoScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (entered) 1f else 0.55f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = 0.55f,
+            stiffness    = androidx.compose.animation.core.Spring.StiffnessMediumLow
+        ),
+        label = "logoScale"
+    )
+
+    // Logo: fades in as it scales
+    val logoAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 450, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "logoAlpha"
+    )
+
+    // Text: slides up from +30dp and fades in, delayed 200 ms after logo starts
+    val textOffsetY by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (entered) 0f else 30f,
+        animationSpec = tween(durationMillis = 500, delayMillis = 250, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "textOffsetY"
+    )
+    val textAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 450, delayMillis = 250, easing = LinearEasing),
+        label = "textAlpha"
+    )
+
+    // Glow ring: infinite breathe (scale + alpha)
+    val infiniteTransition = rememberInfiniteTransition(label = "glowBreath")
+    val glowPulse by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue  = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation  = tween(1600, easing = androidx.compose.animation.core.EaseInOut),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "glowPulse"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue  = 0.55f,
+        animationSpec = infiniteRepeatable(
+            animation  = tween(1600, easing = androidx.compose.animation.core.EaseInOut),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
     )
 
     LaunchedEffect(Unit) {
-        // Hold the splash for 1.8 s then fade out
-        kotlinx.coroutines.delay(1800)
+        entered = true                         // triggers entrance animations immediately
+        kotlinx.coroutines.delay(2000)
         isFadingOut = true
-        kotlinx.coroutines.delay(500)
+        kotlinx.coroutines.delay(450)
         onSplashFinished()
     }
 
-    // Pure black for dark theme, pure white for light theme
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val bgColor = if (isDark) Color.Black else Color.White
-    val textColor = if (isDark) Color.White.copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.65f)
+    // ── Theme-aware colours ────────────────────────────────────────────────
+    val isDark     = androidx.compose.foundation.isSystemInDarkTheme()
+    val bgColor    = if (isDark) Color.Black else Color.White
+    val textColor  = if (isDark) Color.White.copy(alpha = 0.80f) else Color(0xFF1A1A1A).copy(alpha = 0.70f)
+    // Glow accent: primary colour on dark, a soft brand tint on light
+    val glowColor  = if (isDark) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
+            .graphicsLayer { alpha = containerAlpha }
             .pointerInput(Unit) {},
         contentAlignment = Alignment.Center
     ) {
-        // Logo + text share the same alpha so they always appear/disappear together.
-        // Use synchronous Image (painterResource) so the image is available on the
-        // very first frame — no async decode means no "text before image" glitch.
+        // ── Ambient glow ring behind the logo ────────────────────────────
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = alphaAnim },
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = androidx.compose.ui.res.painterResource(id = currentIconRes),
-                contentDescription = "App Logo",
-                modifier = Modifier
-                    .size(120.dp)
-                    .graphicsLayer {
-                        scaleX = scaleAnim
-                        scaleY = scaleAnim
-                    }
-                    .clip(RoundedCornerShape(28.dp)),
-                contentScale = ContentScale.Fit
-            )
+                .size(180.dp)
+                .graphicsLayer {
+                    scaleX = logoScale * glowPulse
+                    scaleY = logoScale * glowPulse
+                    alpha  = logoAlpha * glowAlpha
+                }
+                .clip(CircleShape)
+                .background(
+                    androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            glowColor,
+                            glowColor.copy(alpha = 0.15f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
 
-            // Bottom title: "Arcade Software"
-            Text(
-                text = "Arcade Software",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.5.sp
-                ),
-                color = textColor,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 32.dp)
-            )
-        }
+        // ── Logo ─────────────────────────────────────────────────────────
+        Image(
+            painter = androidx.compose.ui.res.painterResource(id = currentIconRes),
+            contentDescription = "App Logo",
+            modifier = Modifier
+                .size(120.dp)
+                .graphicsLayer {
+                    scaleX = logoScale
+                    scaleY = logoScale
+                    alpha  = logoAlpha
+                }
+                .clip(RoundedCornerShape(28.dp)),
+            contentScale = ContentScale.Fit
+        )
+
+        // ── "Arcade Software" label — slides up from bottom ───────────────
+        Text(
+            text = "Arcade Software",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight    = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp
+            ),
+            color = textColor,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 32.dp)
+                .graphicsLayer {
+                    translationY = textOffsetY * density
+                    alpha        = textAlpha
+                }
+        )
     }
 }
 
