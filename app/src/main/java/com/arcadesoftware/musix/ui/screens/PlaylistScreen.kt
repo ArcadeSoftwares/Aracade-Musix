@@ -52,6 +52,11 @@ import com.music.innertube.models.Artist
 import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.AlbumItem
 import com.music.innertube.models.SongItem
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.widget.Toast
+import com.arcadesoftware.musix.isNetworkAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -706,6 +711,47 @@ private fun UserPlaylistDetailScreen(
     val context = LocalContext.current
     val db = remember(context) { AppDatabase.getDatabase(context) }
     val songs by db.musicDao().getSongsForPlaylist(playlist.id).collectAsState(initial = emptyList())
+    val downloadedSongs by db.musicDao().getDownloadedSongs().collectAsState(initial = emptyList())
+    val downloadProgressMap by PlayerManager.downloadProgressMap.collectAsState()
+    val downloadedIds = remember(downloadedSongs) { downloadedSongs.map { it.id }.toSet() }
+
+    val undownloadedSongs = remember(songs, downloadedIds, downloadProgressMap) {
+        songs.filter { song ->
+            !downloadedIds.contains(song.id) && !downloadProgressMap.containsKey(song.id)
+        }
+    }
+
+    val isWifiConnected = remember(context) {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork
+        val caps = cm.getNetworkCapabilities(network)
+        caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    }
+
+    val profilePrefs = remember(context) { context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE) }
+    val autoDownloadEnabled = remember(profilePrefs) { profilePrefs.getBoolean("auto_download_playlists", false) }
+    val wifiOnlyEnabled = remember(profilePrefs) { profilePrefs.getBoolean("wifi_only_download", false) }
+
+    fun triggerPlaylistDownload() {
+        val songsToDownload = songs.filter { !downloadedIds.contains(it.id) }
+        songsToDownload.forEach { song ->
+            val songItem = song.toSongItem()
+            PlayerManager.startDownload(songItem, context, groupName = playlist.name)
+        }
+        Toast.makeText(context, "Downloading playlist songs...", Toast.LENGTH_SHORT).show()
+    }
+
+    // Auto-download check when playlist opens or songs update
+    LaunchedEffect(songs, autoDownloadEnabled, wifiOnlyEnabled, isWifiConnected) {
+        if (autoDownloadEnabled && undownloadedSongs.isNotEmpty()) {
+            val isNetworkOk = if (wifiOnlyEnabled) isWifiConnected else isNetworkAvailable(context)
+            if (isNetworkOk) {
+                undownloadedSongs.forEach { song ->
+                    PlayerManager.startDownload(song.toSongItem(), context, groupName = playlist.name)
+                }
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val appleRed = Color(0xFFFA243C)
     val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
@@ -1327,8 +1373,12 @@ private fun UserPlaylistDetailScreen(
                 }
             }
 
-            // Playlist icon button
-            Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+            // Top right buttons: Edit & Download (if any song is not downloaded)
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 LiquidButton(
                     onClick = { showEditSheet = true },
                     backdrop = backdrop,
@@ -1340,6 +1390,21 @@ private fun UserPlaylistDetailScreen(
                         tint = appleRed,
                         modifier = Modifier.size(20.dp)
                     )
+                }
+
+                if (undownloadedSongs.isNotEmpty()) {
+                    LiquidButton(
+                        onClick = { triggerPlaylistDownload() },
+                        backdrop = backdrop,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Download,
+                            contentDescription = "Download Playlist",
+                            tint = appleRed,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
