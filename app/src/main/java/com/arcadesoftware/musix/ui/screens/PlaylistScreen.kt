@@ -875,22 +875,24 @@ private fun UserPlaylistDetailScreen(
                             }
 
                             // Standard Play / Pause button
-                            LiquidButton(
-                                onClick = {
-                                    if (isThisPlaylistPlaying) {
-                                        PlayerManager.togglePlayPause()
-                                    } else {
-                                        PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                        val songList = songs.map { it.toSongItem() }
-                                        if (songList.isNotEmpty()) {
-                                            PlayerManager.playQueue(songList, 0)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp)
+                                    .clip(RoundedCornerShape(25.dp))
+                                    .background(playButtonBg)
+                                    .clickable {
+                                        if (isThisPlaylistPlaying) {
+                                            PlayerManager.togglePlayPause()
+                                        } else {
+                                            PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
+                                            val songList = songs.map { it.toSongItem() }
+                                            if (songList.isNotEmpty()) {
+                                                PlayerManager.playQueue(songList, 0)
+                                            }
                                         }
-                                    }
-                                },
-                                backdrop = backdrop,
-                                modifier = Modifier.weight(1f).height(50.dp),
-                                surfaceColor = playButtonBg,
-                                tint = playButtonContentColor
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                                     Icon(
@@ -910,34 +912,36 @@ private fun UserPlaylistDetailScreen(
                             }
 
                             // Clean Shuffle button
-                            LiquidButton(
-                                onClick = {
-                                    val newShuffleState = !isShuffleEnabled
-                                    PlayerManager.setShuffle(newShuffleState, context)
-                                    val songList = songs.map { it.toSongItem() }
-                                    if (songList.isNotEmpty()) {
-                                        if (isThisPlaylistPlaying) {
-                                            val currentSong = PlayerManager.currentSong.value
-                                            val remainingSongs = songList.filter { it.id != currentSong?.id }
-                                            if (newShuffleState) {
-                                                val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songList.shuffled()
-                                                PlayerManager.queue.value = newQueue
-                                                PlayerManager.currentQueueIndex.value = 0
-                                            } else {
-                                                val originalIndex = songList.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
-                                                PlayerManager.queue.value = songList
-                                                PlayerManager.currentQueueIndex.value = originalIndex
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp)
+                                    .clip(RoundedCornerShape(25.dp))
+                                    .background(shuffleButtonBg)
+                                    .clickable {
+                                        val newShuffleState = !isShuffleEnabled
+                                        PlayerManager.setShuffle(newShuffleState, context)
+                                        val songList = songs.map { it.toSongItem() }
+                                        if (songList.isNotEmpty()) {
+                                            if (isThisPlaylistPlaying) {
+                                                val currentSong = PlayerManager.currentSong.value
+                                                val remainingSongs = songList.filter { it.id != currentSong?.id }
+                                                if (newShuffleState) {
+                                                    val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songList.shuffled()
+                                                    PlayerManager.queue.value = newQueue
+                                                    PlayerManager.currentQueueIndex.value = 0
+                                                } else {
+                                                    val originalIndex = songList.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
+                                                    PlayerManager.queue.value = songList
+                                                    PlayerManager.currentQueueIndex.value = originalIndex
+                                                }
+                                            } else if (newShuffleState) {
+                                                PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
+                                                PlayerManager.playQueue(songList.shuffled(), 0)
                                             }
-                                        } else if (newShuffleState) {
-                                            PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                            PlayerManager.playQueue(songList.shuffled(), 0)
                                         }
-                                    }
-                                },
-                                backdrop = backdrop,
-                                modifier = Modifier.weight(1f).height(50.dp),
-                                surfaceColor = shuffleButtonBg,
-                                tint = shuffleButtonContentColor
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                                     Icon(
@@ -1820,21 +1824,23 @@ fun BuiltInPlaylistDetailScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            LiquidButton(
-                                onClick = {
-                                    if (isThisPlaylistPlaying) {
-                                        PlayerManager.togglePlayPause()
-                                    } else {
-                                        if (songs.isNotEmpty()) {
-                                            PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
-                                            PlayerManager.playQueue(songs, 0)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp)
+                                    .clip(RoundedCornerShape(25.dp))
+                                    .background(playButtonBg)
+                                    .clickable {
+                                        if (isThisPlaylistPlaying) {
+                                            PlayerManager.togglePlayPause()
+                                        } else {
+                                            if (songs.isNotEmpty()) {
+                                                PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
+                                                PlayerManager.playQueue(songs, 0)
+                                            }
                                         }
-                                    }
-                                },
-                                backdrop = backdrop,
-                                modifier = Modifier.weight(1f).height(50.dp),
-                                surfaceColor = playButtonBg,
-                                tint = playButtonContentColor
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1855,33 +1861,35 @@ fun BuiltInPlaylistDetailScreen(
                                     )
                                 }
                             }
-                            LiquidButton(
-                                onClick = {
-                                    val newShuffleState = !isShuffleEnabled
-                                    PlayerManager.setShuffle(newShuffleState, context)
-                                    if (songs.isNotEmpty()) {
-                                        if (isThisPlaylistPlaying) {
-                                            val currentSong = PlayerManager.currentSong.value
-                                            val remainingSongs = songs.filter { it.id != currentSong?.id }
-                                            if (newShuffleState) {
-                                                val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songs.shuffled()
-                                                PlayerManager.queue.value = newQueue
-                                                PlayerManager.currentQueueIndex.value = if (currentSong != null) 0 else 0
-                                            } else {
-                                                val originalIndex = songs.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
-                                                PlayerManager.queue.value = songs
-                                                PlayerManager.currentQueueIndex.value = originalIndex
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp)
+                                    .clip(RoundedCornerShape(25.dp))
+                                    .background(shuffleButtonBg)
+                                    .clickable {
+                                        val newShuffleState = !isShuffleEnabled
+                                        PlayerManager.setShuffle(newShuffleState, context)
+                                        if (songs.isNotEmpty()) {
+                                            if (isThisPlaylistPlaying) {
+                                                val currentSong = PlayerManager.currentSong.value
+                                                val remainingSongs = songs.filter { it.id != currentSong?.id }
+                                                if (newShuffleState) {
+                                                    val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songs.shuffled()
+                                                    PlayerManager.queue.value = newQueue
+                                                    PlayerManager.currentQueueIndex.value = if (currentSong != null) 0 else 0
+                                                } else {
+                                                    val originalIndex = songs.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
+                                                    PlayerManager.queue.value = songs
+                                                    PlayerManager.currentQueueIndex.value = originalIndex
+                                                }
+                                            } else if (newShuffleState) {
+                                                PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
+                                                PlayerManager.playQueue(songs.shuffled(), 0)
                                             }
-                                        } else if (newShuffleState) {
-                                            PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
-                                            PlayerManager.playQueue(songs.shuffled(), 0)
                                         }
-                                    }
-                                },
-                                backdrop = backdrop,
-                                modifier = Modifier.weight(1f).height(50.dp),
-                                surfaceColor = shuffleButtonBg,
-                                tint = shuffleButtonContentColor
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
