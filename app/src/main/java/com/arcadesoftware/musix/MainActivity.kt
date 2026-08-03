@@ -1693,7 +1693,7 @@ fun ProfessionalSplashScreen(
         label = "textAlpha"
     )
 
-    // Glow ring: infinite breathe (scale + alpha)
+    // Glow ring + border ring: infinite breathe (scale + alpha + rotation)
     val infiniteTransition = rememberInfiniteTransition(label = "glowBreath")
     val glowPulse by infiniteTransition.animateFloat(
         initialValue = 0.85f,
@@ -1713,10 +1713,20 @@ fun ProfessionalSplashScreen(
         ),
         label = "glowAlpha"
     )
+    // Rotating gradient border angle
+    val borderRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue  = 360f,
+        animationSpec = infiniteRepeatable(
+            animation  = tween(3000, easing = LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+        ),
+        label = "borderRotation"
+    )
 
     LaunchedEffect(Unit) {
         entered = true                         // triggers entrance animations immediately
-        kotlinx.coroutines.delay(2000)
+        kotlinx.coroutines.delay(2500)         // +500 ms extra hold
         isFadingOut = true
         kotlinx.coroutines.delay(450)
         onSplashFinished()
@@ -1769,40 +1779,77 @@ fun ProfessionalSplashScreen(
                 )
         )
 
-        // ── Logo ─────────────────────────────────────────────────────────
-        Image(
-            painter = androidx.compose.ui.res.painterResource(id = currentIconRes),
-            contentDescription = "App Logo",
+        // ── Logo with rotating gradient border ───────────────────────────
+        Box(
             modifier = Modifier
-                .size(120.dp)
+                .size(128.dp)
                 .graphicsLayer {
-                    scaleX = logoScale
-                    scaleY = logoScale
-                    alpha  = logoAlpha
+                    scaleX        = logoScale
+                    scaleY        = logoScale
+                    alpha         = logoAlpha
+                    rotationZ     = borderRotation
                 }
-                .clip(RoundedCornerShape(28.dp)),
-            contentScale = ContentScale.Fit
-        )
+                .clip(RoundedCornerShape(30.dp))
+                .background(
+                    androidx.compose.ui.graphics.Brush.sweepGradient(
+                        colors = listOf(
+                            Color(0xFFFA243C),
+                            Color(0xFFFF6B35),
+                            Color(0xFFFFD700),
+                            Color(0xFF00C9FF),
+                            Color(0xFF7B2FBE),
+                            Color(0xFFFA243C)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            // Counter-rotate the inner image so it stays upright
+            Image(
+                painter = androidx.compose.ui.res.painterResource(id = currentIconRes),
+                contentDescription = "App Logo",
+                modifier = Modifier
+                    .size(122.dp)
+                    .graphicsLayer { rotationZ = -borderRotation }
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(bgColor),
+                contentScale = ContentScale.Fit
+            )
+        }
 
-        // ── "Arcade Software" label — slides up from bottom ───────────────
-        Text(
-            text = "Arcade Software",
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight    = FontWeight.SemiBold,
-                letterSpacing = 1.5.sp
-            ),
-            color = textColor,
-            maxLines = 1,
-            softWrap = false,
+        // ── "Arcade Software" + "Made with ❤️" — slides up from bottom ────
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 32.dp)
+                .padding(bottom = 28.dp)
                 .graphicsLayer {
                     translationY = textOffsetY * density
                     alpha        = textAlpha
                 }
-        )
+        ) {
+            Text(
+                text = "Arcade Software",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight    = FontWeight.SemiBold,
+                    letterSpacing = 1.5.sp
+                ),
+                color = textColor,
+                maxLines = 1,
+                softWrap = false
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Made with \u2764\ufe0f",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    letterSpacing = 0.5.sp
+                ),
+                color = textColor.copy(alpha = 0.55f),
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }
 
@@ -2832,31 +2879,46 @@ fun MainScreen() {
 
         }
 
-        // Downloads screen overlay
+        // Downloads screen overlay — swipe-down to dismiss
         androidx.compose.animation.AnimatedVisibility(
             visible = showDownloadsScreen,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.9f).fillMaxWidth(),
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
         ) {
+            var dragOffsetY by remember { mutableFloatStateOf(0f) }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .graphicsLayer { translationY = dragOffsetY.coerceAtLeast(0f) }
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                     .background(MaterialTheme.colorScheme.background)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (dragOffsetY > 160f) {
+                                    showDownloadsScreen = false
+                                }
+                                dragOffsetY = 0f
+                            },
+                            onDragCancel = { dragOffsetY = 0f }
+                        ) { _, dragAmount ->
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        }
+                    }
             ) {
                 com.arcadesoftware.musix.ui.screens.DownloadsScreen(
                     onBackClick = { showDownloadsScreen = false }
                 )
-                // Add a drag handle at the top
+                // Drag handle at the top
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 8.dp)
-                        .width(32.dp)
+                        .padding(top = 10.dp)
+                        .width(36.dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f))
                 )
             }
         }
