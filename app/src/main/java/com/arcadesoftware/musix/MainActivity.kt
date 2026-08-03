@@ -1723,7 +1723,18 @@ fun ProfessionalSplashScreen(
     }
 
     // ── Theme-aware colours ────────────────────────────────────────────────
-    val isDark     = androidx.compose.foundation.isSystemInDarkTheme()
+    // Respect the app's own theme preference (0=system, 1=light, 2=dark)
+    // rather than always following the system dark-mode setting.
+    val systemDark  = androidx.compose.foundation.isSystemInDarkTheme()
+    val themePref   = remember {
+        context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            .getInt("theme_preference", 0)
+    }
+    val isDark = when (themePref) {
+        1    -> false   // force light
+        2    -> true    // force dark
+        else -> systemDark  // follow system
+    }
     val bgColor    = if (isDark) Color.Black else Color.White
     val textColor  = if (isDark) Color.White.copy(alpha = 0.80f) else Color(0xFF1A1A1A).copy(alpha = 0.70f)
     // Glow accent: primary colour on dark, a soft brand tint on light
@@ -1911,9 +1922,15 @@ fun MainScreen() {
     LaunchedEffect(currentUser, showForceUpdateDialog, showSoftUpdateDialog, showBlockAllAccessDialog) {
         if (currentUser == null && !hasPromptedSync && !showForceUpdateDialog && !showSoftUpdateDialog && !showBlockAllAccessDialog) {
             hasPromptedSync = true
-            kotlinx.coroutines.delay(2000)
-            if (!showForceUpdateDialog && !showSoftUpdateDialog && !showBlockAllAccessDialog) {
-                showCloudSyncPrompt = true
+            // Check 7-day snooze: only show if the user hasn't snoozed recently
+            val syncPrefs = context.getSharedPreferences("musix_sync_prompt", Context.MODE_PRIVATE)
+            val remindAt = syncPrefs.getLong("remind_after_ms", 0L)
+            val now = System.currentTimeMillis()
+            if (now >= remindAt) {
+                kotlinx.coroutines.delay(2000)
+                if (!showForceUpdateDialog && !showSoftUpdateDialog && !showBlockAllAccessDialog) {
+                    showCloudSyncPrompt = true
+                }
             }
         }
     }
@@ -3062,7 +3079,14 @@ fun MainScreen() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         androidx.compose.material3.TextButton(
-                            onClick = { showCloudSyncPrompt = false },
+                            onClick = {
+                                // Snooze for 7 days
+                                val syncPrefs = context.getSharedPreferences("musix_sync_prompt", Context.MODE_PRIVATE)
+                                syncPrefs.edit()
+                                    .putLong("remind_after_ms", System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000)
+                                    .apply()
+                                showCloudSyncPrompt = false
+                            },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = androidx.compose.ui.graphics.RectangleShape
                         ) {
