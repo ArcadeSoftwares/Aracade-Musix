@@ -848,6 +848,7 @@ private fun UserPlaylistDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
+                            // Standard Play button
                             Box(
                                 modifier = Modifier
                                     .weight(1f).height(48.dp)
@@ -856,20 +857,24 @@ private fun UserPlaylistDetailScreen(
                                     .clickable {
                                         PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
                                         val songList = songs.map { it.toSongItem() }
-                                        PlayerManager.playQueue(if (isShuffleEnabled) songList.shuffled() else songList, 0)
+                                        if (songList.isNotEmpty()) {
+                                            if (isShuffleEnabled) {
+                                                val randomIndex = (songList.indices).random()
+                                                PlayerManager.playQueue(songList.shuffled(), randomIndex)
+                                            } else {
+                                                PlayerManager.playQueue(songList, 0)
+                                            }
+                                        }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                                    if (isShuffleEnabled) {
-                                        Icon(Icons.Rounded.ShuffleOn, contentDescription = null, tint = appleRed, modifier = Modifier.size(20.dp))
-                                    } else {
-                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = appleRed, modifier = Modifier.size(24.dp))
-                                    }
+                                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = appleRed, modifier = Modifier.size(24.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = if (isShuffleEnabled) "Shuffle Play" else "Play", color = appleRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(text = "Play", color = appleRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 }
                             }
+                            // Clean Shuffle button
                             Box(
                                 modifier = Modifier
                                     .weight(1f).height(48.dp)
@@ -883,7 +888,8 @@ private fun UserPlaylistDetailScreen(
                                         PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
                                         val songList = songs.map { it.toSongItem() }
                                         if (songList.isNotEmpty()) {
-                                            PlayerManager.playQueue(if (PlayerManager.isShuffleEnabled.value) songList.shuffled() else songList, 0)
+                                            val randomIndex = (songList.indices).random()
+                                            PlayerManager.playQueue(songList.shuffled(), randomIndex)
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -1672,46 +1678,94 @@ fun BuiltInPlaylistDetailScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // Large Apple-style artwork card
+                        Box(
+                            modifier = Modifier
+                                .size(220.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(
+                                    if (type == "liked") {
+                                        Brush.linearGradient(
+                                            colors = listOf(Color(0xFFFA243C), Color(0xFFFF5E3A), Color(0xFFFF2A68))
+                                        )
+                                    } else {
+                                        Brush.linearGradient(
+                                            colors = listOf(Color(0xFF2E86AB), Color(0xFF00B4D8), Color(0xFF0077B6))
+                                        )
+                                    }
+                                )
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!songs.firstOrNull()?.thumbnail.isNullOrEmpty()) {
+                                AsyncImage(
+                                    model = songs.firstOrNull()?.thumbnail,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.25f))
+                                )
+                            }
+                            Icon(
+                                imageVector = if (type == "liked") Icons.Rounded.Favorite else Icons.Rounded.Download,
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                tint = Color.White
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
                         Text(
                             title,
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 32.sp
+                            ),
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "${songs.size} songs",
+                            "${songs.size} ${if (songs.size == 1) "song" else "songs"}",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                         Spacer(modifier = Modifier.height(24.dp))
+
+                        // Apple-style Play & Shuffle pill buttons
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             LiquidButton(
                                 onClick = {
                                     if (songs.isNotEmpty()) {
                                         PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
-                                        PlayerManager.playQueue(if (isShuffleEnabled) songs.shuffled() else songs, 0)
+                                        if (isShuffleEnabled) {
+                                            val randomIndex = (songs.indices).random()
+                                            PlayerManager.playQueue(songs.shuffled(), randomIndex)
+                                        } else {
+                                            PlayerManager.playQueue(songs, 0)
+                                        }
                                     }
                                 },
                                 backdrop = backdrop,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).height(50.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
-                                    if (isShuffleEnabled) {
-                                        Icon(Icons.Rounded.ShuffleOn, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
-                                    } else {
-                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-                                    }
+                                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(if (isShuffleEnabled) "Shuffle Play" else "Play", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                                    Text("Play", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onPrimary)
                                 }
                             }
                             LiquidButton(
@@ -1719,16 +1773,13 @@ fun BuiltInPlaylistDetailScreen(
                                     PlayerManager.toggleShuffle(context)
                                     if (songs.isNotEmpty()) {
                                         PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
-                                        if (PlayerManager.isShuffleEnabled.value) {
-                                            PlayerManager.playQueue(songs.shuffled(), 0)
-                                        } else {
-                                            PlayerManager.playQueue(songs, 0)
-                                        }
+                                        val randomIndex = (songs.indices).random()
+                                        PlayerManager.playQueue(songs.shuffled(), randomIndex)
                                     }
                                 },
                                 backdrop = backdrop,
-                                modifier = Modifier.weight(1f),
-                                surfaceColor = if (isShuffleEnabled) appleRed.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                surfaceColor = if (isShuffleEnabled) appleRed.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                 tint = if (isShuffleEnabled) appleRed else MaterialTheme.colorScheme.onSurfaceVariant
                             ) {
                                 Row(
@@ -1738,12 +1789,14 @@ fun BuiltInPlaylistDetailScreen(
                                     Icon(
                                         imageVector = if (isShuffleEnabled) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
                                         contentDescription = null,
-                                        tint = if (isShuffleEnabled) appleRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = if (isShuffleEnabled) appleRed else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         "Shuffle",
                                         fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
                                         color = if (isShuffleEnabled) appleRed else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
