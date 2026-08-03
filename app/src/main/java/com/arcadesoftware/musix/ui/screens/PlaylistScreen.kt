@@ -142,6 +142,34 @@ fun PlaylistScreen(
         }
     }
 
+    var playlistToDelete by remember { mutableStateOf<com.arcadesoftware.musix.db.entities.PlaylistEntity?>(null) }
+
+    if (playlistToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { playlistToDelete = null },
+            title = { Text("Delete Playlist", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to delete '${playlistToDelete?.name}'? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        playlistToDelete?.let { viewModel.deletePlaylist(it.id) }
+                        playlistToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFA243C))
+                ) {
+                    Text("Delete", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistToDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
@@ -439,7 +467,7 @@ fun PlaylistScreen(
                             UserPlaylistCard(
                                 playlist = playlist,
                                 onClick = { PlayerManager.activeUserPlaylist.value = playlist },
-                                onDeleteClick = { viewModel.deletePlaylist(playlist.id) }
+                                onDeleteClick = { playlistToDelete = playlist }
                             )
                         }
                     }
@@ -680,6 +708,7 @@ private fun UserPlaylistDetailScreen(
     val songs by db.musicDao().getSongsForPlaylist(playlist.id).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val appleRed = Color(0xFFFA243C)
+    val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
     var showEditSheet by remember { mutableStateOf(false) }
     var showSongOptionsSheet by remember { mutableStateOf<com.arcadesoftware.musix.db.entities.PlayHistoryEntity?>(null) }
     var editName by remember(playlist.name) { mutableStateOf(playlist.name) }
@@ -847,7 +876,6 @@ private fun UserPlaylistDetailScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
                             val isPlaying by PlayerManager.isPlaying.collectAsState()
                             val currentPlaylist by PlayerManager.currentPlayingPlaylist.collectAsState()
                             val isThisPlaylistPlaying = currentPlaylist?.id == buildYtPlaylistItem().id
@@ -945,7 +973,7 @@ private fun UserPlaylistDetailScreen(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                                     Icon(
-                                        imageVector = if (isShuffleEnabled) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
+                                        imageVector = com.arcadesoftware.musix.ui.icons.ShuffleIcon,
                                         contentDescription = null,
                                         tint = shuffleButtonContentColor,
                                         modifier = Modifier.size(20.dp)
@@ -993,8 +1021,15 @@ private fun UserPlaylistDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable(interactionSource = interactionSource, indication = null) {
+                                val songList = songs.map { it.toSongItem() }
                                 PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                PlayerManager.playQueue(songs.map { it.toSongItem() }, index)
+                                if (isShuffleEnabled) {
+                                    val tapped = songList[index]
+                                    val rest = songList.toMutableList().also { it.removeAt(index) }.shuffled()
+                                    PlayerManager.playQueue(listOf(tapped) + rest, 0)
+                                } else {
+                                    PlayerManager.playQueue(songList, index)
+                                }
                             }
                             .background(
                                 if (isPlaying) MaterialTheme.colorScheme.primary.copy(0.07f)
@@ -1005,12 +1040,7 @@ private fun UserPlaylistDetailScreen(
                     ) {
                         Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.Center) {
                             if (isPlaying) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.VolumeUp,
-                                    contentDescription = "Playing",
-                                    tint = appleRed,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                MusicBarsAnimation(tint = appleRed)
                             } else {
                                 Text(
                                     text = (index + 1).toString(),
@@ -1035,15 +1065,10 @@ private fun UserPlaylistDetailScreen(
                             )
                             if (isPlaying) {
                                 Box(
-                                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Rounded.VolumeUp,
-                                        contentDescription = "Playing",
-                                        tint = MaterialTheme.colorScheme.onBackground,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                    MusicBarsAnimation(tint = Color.White)
                                 }
                             }
                         }
@@ -1423,7 +1448,7 @@ private fun PlaylistCard(
                     Icon(
                         Icons.Rounded.Delete,
                         contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                        tint = Color.White,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -1593,34 +1618,34 @@ private fun DownloadedSongRow(
 }
 
 @Composable
-private fun MusicBarsAnimation() {
+private fun MusicBarsAnimation(tint: Color = MaterialTheme.colorScheme.primary) {
     val infiniteTransition = rememberInfiniteTransition(label = "bars")
     val bar1 by infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(400, easing = LinearEasing), RepeatMode.Reverse),
+        initialValue = 0.25f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "b1"
     )
     val bar2 by infiniteTransition.animateFloat(
         initialValue = 1f, targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(tween(500, easing = LinearEasing), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(490, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "b2"
     )
     val bar3 by infiniteTransition.animateFloat(
-        initialValue = 0.6f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(350, easing = LinearEasing), RepeatMode.Reverse),
+        initialValue = 0.55f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(340, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "b3"
     )
     Row(
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.5.dp),
         verticalAlignment = Alignment.Bottom,
-        modifier = Modifier.height(18.dp)
+        modifier = Modifier.height(16.dp)
     ) {
         listOf(bar1, bar2, bar3).forEach { h ->
             Box(
                 modifier = Modifier
                     .width(3.dp)
                     .fillMaxHeight(h)
-                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+                    .background(tint, RoundedCornerShape(2.dp))
             )
         }
     }
@@ -1896,7 +1921,7 @@ fun BuiltInPlaylistDetailScreen(
                                     horizontalArrangement = Arrangement.Center
                                 ) {
                                     Icon(
-                                        imageVector = if (isShuffleEnabled) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
+                                        imageVector = com.arcadesoftware.musix.ui.icons.ShuffleIcon,
                                         contentDescription = null,
                                         tint = shuffleButtonContentColor,
                                         modifier = Modifier.size(20.dp)

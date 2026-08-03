@@ -475,7 +475,7 @@ fun PlaylistDetailScreen(
                                     horizontalArrangement = Arrangement.Center
                                 ) {
                                     Icon(
-                                        imageVector = if (isShuffleEnabled) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
+                                        imageVector = com.arcadesoftware.musix.ui.icons.ShuffleIcon,
                                         contentDescription = null,
                                         tint = shuffleButtonContentColor,
                                         modifier = Modifier.size(20.dp)
