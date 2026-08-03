@@ -1779,40 +1779,29 @@ fun ProfessionalSplashScreen(
                 )
         )
 
-        // ── Logo with rotating gradient border ───────────────────────────
+        // ── Logo with rotating glow border (same as miniplayer ring) ───────
         Box(
             modifier = Modifier
-                .size(128.dp)
+                .size(124.dp)
                 .graphicsLayer {
-                    scaleX        = logoScale
-                    scaleY        = logoScale
-                    alpha         = logoAlpha
-                    rotationZ     = borderRotation
+                    scaleX = logoScale
+                    scaleY = logoScale
+                    alpha  = logoAlpha
                 }
-                .clip(RoundedCornerShape(30.dp))
-                .background(
-                    androidx.compose.ui.graphics.Brush.sweepGradient(
-                        colors = listOf(
-                            Color(0xFFFA243C),
-                            Color(0xFFFF6B35),
-                            Color(0xFFFFD700),
-                            Color(0xFF00C9FF),
-                            Color(0xFF7B2FBE),
-                            Color(0xFFFA243C)
-                        )
-                    )
-                ),
+                .com.arcadesoftware.musix.components.rotatingGlowBorder(
+                    rotation = borderRotation,
+                    strokeWidth = 3.dp,
+                    cornerRadius = 26.dp
+                )
+                .padding(3.dp)
+                .clip(RoundedCornerShape(23.dp))
+                .background(bgColor),
             contentAlignment = Alignment.Center
         ) {
-            // Counter-rotate the inner image so it stays upright
             Image(
                 painter = androidx.compose.ui.res.painterResource(id = currentIconRes),
                 contentDescription = "App Logo",
-                modifier = Modifier
-                    .size(122.dp)
-                    .graphicsLayer { rotationZ = -borderRotation }
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(bgColor),
+                modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit
             )
         }
