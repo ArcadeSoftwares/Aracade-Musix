@@ -1622,9 +1622,7 @@ fun ProfessionalSplashScreen(
     onSplashFinished: () -> Unit
 ) {
     val context = LocalContext.current
-    val sharedPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     
-    val selectedIconIndex = remember { sharedPrefs.getInt("app_icon_preference", 0) }
     val icons = remember {
         listOf(
             R.mipmap.ic_iconic,
@@ -1639,6 +1637,18 @@ fun ProfessionalSplashScreen(
             R.mipmap.ic_icon3dsoft
         )
     }
+
+    val selectedIconIndex by produceState(initialValue = 0) {
+        val prefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+        val appPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val index = if (prefs.contains("app_icon_preference")) {
+            prefs.getInt("app_icon_preference", 0)
+        } else {
+            appPrefs.getInt("app_icon_preference", 0)
+        }
+        value = index
+    }
+    
     val currentIconRes = icons.getOrElse(selectedIconIndex) { R.mipmap.ic_iconic }
 
     var startAnimation by remember { mutableStateOf(false) }
@@ -1713,7 +1723,7 @@ fun ProfessionalSplashScreen(
                 )
         )
 
-        // Main Icon & Title Content
+        // Main Icon & Title Content (Icon presented first)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -1775,32 +1785,21 @@ fun ProfessionalSplashScreen(
             )
         }
 
-        // Author / Publisher Branding Footer
+        // Author / Publisher Branding Footer in Clean White Text without "DEVELOPED BY"
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
+                .padding(bottom = 28.dp, start = 16.dp, end = 16.dp)
         ) {
-            Text(
-                text = "DEVELOPED BY",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    letterSpacing = 2.5.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = Color.White.copy(alpha = 0.4f),
-                maxLines = 1,
-                softWrap = false
-            )
-            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Arcade Softwares",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
+                    letterSpacing = 1.5.sp
                 ),
-                color = MaterialTheme.colorScheme.primary,
+                color = Color.White,
                 maxLines = 1,
                 softWrap = false
             )
@@ -2526,6 +2525,8 @@ fun MainScreen() {
                                 val iconRes = icons[index]
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable {
                                     sharedPrefs.edit().putInt("app_icon_preference", index).apply()
+                                    context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+                                        .edit().putInt("app_icon_preference", index).apply()
                                     AppIconManager.changeAppIcon(context, index)
                                     android.widget.Toast.makeText(context, "App Icon Updated", android.widget.Toast.LENGTH_SHORT).show()
                                 }) {
