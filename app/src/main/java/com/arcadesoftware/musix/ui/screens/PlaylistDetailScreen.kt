@@ -288,7 +288,7 @@ fun PlaylistDetailScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 96.dp, bottom = 120.dp)
+                    contentPadding = PaddingValues(top = 96.dp, bottom = 160.dp)
                 ) {
                     // Centered Album Art & Metadata (Apple Music Style)
                     item {
