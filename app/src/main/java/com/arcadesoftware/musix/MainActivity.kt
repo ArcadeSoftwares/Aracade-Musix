@@ -2622,9 +2622,8 @@ fun MainScreen() {
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
         ) {
-            val currentBackdropForPlayer = if (activePlaylistDetail != null || activeArtist != null || activeUserPlaylist != null || selectedTab in 1..2) playlistBackdrop else mainBackdrop
             MiniPlayer(
-                backdrop = currentBackdropForPlayer,
+                backdrop = mainBackdrop,
                 currentSong = currentSong,
                 collapsedBottomPadding = if (showBottomBar) 112.dp else 24.dp
             )
