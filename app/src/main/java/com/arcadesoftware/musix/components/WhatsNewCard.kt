@@ -329,10 +329,16 @@ fun Modifier.rotatingGlowBorder(
 ): Modifier {
     val baseColors = remember {
         listOf(
-            Color(0xFF00FFFF),
-            Color(0xFFFF00FF),
-            Color(0xFFFFCC00),
-            Color(0xFF00FFFF)
+            Color(0xFFFF00CC), // Magenta
+            Color(0xFFFF3A00), // Red-Orange
+            Color(0xFFFF8C00), // Orange
+            Color(0xFFFFE000), // Yellow
+            Color(0xFF7DFF00), // Yellow-Green
+            Color(0xFF00FF88), // Green
+            Color(0xFF00FFFF), // Cyan
+            Color(0xFF0088FF), // Blue
+            Color(0xFF7700FF), // Violet
+            Color(0xFFFF00CC)  // Magenta (loop back)
         )
     }
     return this.drawWithCache {
@@ -351,15 +357,13 @@ fun Modifier.rotatingGlowBorder(
         val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
         onDrawWithContent {
             drawContent()
-            val fraction = (rotation % 360f) / 360f
-            val shiftedColors = listOf(
-                lerpColor(baseColors[0], baseColors[1], fraction),
-                lerpColor(baseColors[1], baseColors[2], fraction),
-                lerpColor(baseColors[2], baseColors[3], fraction),
-                lerpColor(baseColors[0], baseColors[1], fraction)
-            )
+            // Rotate the color list offset based on animation fraction for smooth flowing effect
+            val n = baseColors.size - 1 // exclude the looped last color
+            val shift = ((rotation % 360f) / 360f * n).toInt()
+            // Build the sweep gradient using all stops, rotated by shift
+            val rotatedColors = (0 until n).map { i -> baseColors[(i + shift) % n] } + listOf(baseColors[shift % n])
             val brush = androidx.compose.ui.graphics.Brush.sweepGradient(
-                colors = shiftedColors,
+                colors = rotatedColors,
                 center = centerOffset
             )
             // Outer soft glow passes
