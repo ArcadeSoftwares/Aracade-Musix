@@ -168,23 +168,29 @@ fun WhatsNewDialog(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(260.dp)
-                                    .rotatingGlowBorder(
-                                        rotation = rotation,
-                                        strokeWidth = 3.dp,
-                                        cornerRadius = 24.dp
-                                    )
-                                    .padding(3.dp) // padding to prevent image from overlapping border outline
-                                    .clip(RoundedCornerShape(21.dp))
-                                    .background(Color(0xFF141416)),
-                                contentAlignment = Alignment.Center
+                                    .padding(horizontal = 4.dp) // gives glow room to breathe, prevents edge clipping
                             ) {
-                                androidx.compose.foundation.Image(
-                                    painter = androidx.compose.ui.res.painterResource(id = feature.imageRes),
-                                    contentDescription = feature.title,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(260.dp)
+                                        .rotatingGlowBorder(
+                                            rotation = rotation,
+                                            strokeWidth = 3.dp,
+                                            cornerRadius = 24.dp
+                                        )
+                                        .padding(4.dp)
+                                        .clip(RoundedCornerShape(21.dp))
+                                        .background(Color(0xFF141416)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(id = feature.imageRes),
+                                        contentDescription = feature.title,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(32.dp))
@@ -330,14 +336,22 @@ fun Modifier.rotatingGlowBorder(
         )
     }
     return this.drawWithCache {
-        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth.toPx())
-        val corner = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
+        val strokePx = strokeWidth.toPx()
+        val halfStroke = strokePx / 2f
+        val cornerPx = cornerRadius.toPx()
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx)
+        // Inset the rect so the stroke paints fully inside the composable bounds (no cropping)
+        val insetRect = androidx.compose.ui.geometry.Rect(
+            left = halfStroke,
+            top = halfStroke,
+            right = size.width - halfStroke,
+            bottom = size.height - halfStroke
+        )
+        val corner = androidx.compose.ui.geometry.CornerRadius(cornerPx, cornerPx)
         val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
         onDrawWithContent {
             drawContent()
-            // Shift colors dynamically along the sweep gradient path based on normalized rotation (0..1)
             val fraction = (rotation % 360f) / 360f
-            // Interpolate colors array to shift gradient circularly
             val shiftedColors = listOf(
                 lerpColor(baseColors[0], baseColors[1], fraction),
                 lerpColor(baseColors[1], baseColors[2], fraction),
@@ -348,8 +362,33 @@ fun Modifier.rotatingGlowBorder(
                 colors = shiftedColors,
                 center = centerOffset
             )
+            // Outer soft glow passes
             drawRoundRect(
                 brush = brush,
+                topLeft = insetRect.topLeft,
+                size = insetRect.size,
+                cornerRadius = corner,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = strokePx * 4f,
+                    pathEffect = null
+                ),
+                alpha = 0.18f
+            )
+            drawRoundRect(
+                brush = brush,
+                topLeft = insetRect.topLeft,
+                size = insetRect.size,
+                cornerRadius = corner,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = strokePx * 2f
+                ),
+                alpha = 0.35f
+            )
+            // Crisp main border
+            drawRoundRect(
+                brush = brush,
+                topLeft = insetRect.topLeft,
+                size = insetRect.size,
                 cornerRadius = corner,
                 style = stroke
             )
