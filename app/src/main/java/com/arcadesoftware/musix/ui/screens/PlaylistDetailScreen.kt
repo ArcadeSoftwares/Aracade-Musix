@@ -723,7 +723,7 @@ fun PlaylistDetailScreen(
                                 songs!!.forEach { song ->
                                     val isDownloaded = downloadedSongs.any { it.id == song.id }
                                     if (!isDownloaded) {
-                                        PlayerManager.startDownload(song, context)
+                                        PlayerManager.startDownload(song, context, groupName = title)
                                     }
                                 }
                                 com.arcadesoftware.musix.db.DownloadedPlaylistsManager.addDownloadedPlaylist(

@@ -159,6 +159,8 @@ object PlayerManager {
     val downloadProgressMap = MutableStateFlow<Map<String, Float>>(emptyMap())
     val downloadDetailsMap = MutableStateFlow<Map<String, SongItem>>(emptyMap())
     val downloadPauseMap = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    /** Maps songId → playlist/group name for grouping in Download Center */
+    val downloadGroupMap = MutableStateFlow<Map<String, String>>(emptyMap())
     private var restoredSongId: String? = null
     private var seekOnPreparePosition: Long? = null
 
@@ -645,6 +647,7 @@ object PlayerManager {
         activeDownloadJobs.remove(songId)?.cancel()
         downloadDetailsMap.value = downloadDetailsMap.value - songId
         downloadPauseMap.value = downloadPauseMap.value - songId
+        downloadGroupMap.value = downloadGroupMap.value - songId
         synchronized(downloadProgressMap) {
             downloadProgressMap.value = downloadProgressMap.value - songId
         }
@@ -655,13 +658,34 @@ object PlayerManager {
         downloadPauseMap.value = downloadPauseMap.value + (songId to !currentlyPaused)
     }
 
-    fun startDownload(song: SongItem, context: Context) {
+    fun cancelAllDownloads(group: String? = null) {
+        val targets = if (group != null)
+            downloadGroupMap.value.filter { it.value == group }.keys
+        else
+            downloadProgressMap.value.keys.toSet()
+        targets.forEach { cancelDownload(it) }
+    }
+
+    fun pauseAllInGroup(group: String) {
+        downloadGroupMap.value.filter { it.value == group }.keys.forEach { id ->
+            downloadPauseMap.value = downloadPauseMap.value + (id to true)
+        }
+    }
+
+    fun resumeAllInGroup(group: String) {
+        downloadGroupMap.value.filter { it.value == group }.keys.forEach { id ->
+            downloadPauseMap.value = downloadPauseMap.value + (id to false)
+        }
+    }
+
+    fun startDownload(song: SongItem, context: Context, groupName: String = "Singles") {
         val songId = song.id
         synchronized(downloadProgressMap) {
             if (downloadProgressMap.value.containsKey(songId)) return
             downloadProgressMap.value = downloadProgressMap.value + (songId to 0f)
             downloadDetailsMap.value = downloadDetailsMap.value + (songId to song)
             downloadPauseMap.value = downloadPauseMap.value + (songId to false)
+            downloadGroupMap.value = downloadGroupMap.value + (songId to groupName)
         }
         val destFile = java.io.File(
             context.applicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC),
