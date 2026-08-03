@@ -919,6 +919,7 @@ fun ArtistLibraryDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .layerBackdrop(backdrop)
             .background(MaterialTheme.colorScheme.background)
     ) {
         // Blurred ambient background
