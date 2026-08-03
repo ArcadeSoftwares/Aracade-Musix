@@ -1874,6 +1874,12 @@ fun MainScreen() {
     var blockedInfoMessage by remember { mutableStateOf("") }
     var updateUrl by remember { mutableStateOf("") }
 
+    var showPromotionDialog by remember { mutableStateOf(false) }
+    var propTitle by remember { mutableStateOf("") }
+    var propBody by remember { mutableStateOf("") }
+    var propDownloadLink by remember { mutableStateOf("") }
+    var propIconUrls by remember { mutableStateOf<List<String>>(emptyList()) }
+
     LaunchedEffect(Unit) {
         PlayerManager.init(context.applicationContext)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -1890,27 +1896,97 @@ fun MainScreen() {
             
             val vcRef = com.google.firebase.database.FirebaseDatabase.getInstance()
                 .getReference("com_arcadesoftware_musix")
-                .child("version_control")
             vcRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
                 override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
                     if (snapshot.exists()) {
-                        val blockAllAccess = snapshot.child("block_all_access").value as? Boolean ?: false
-                        val minSupported = (snapshot.child("min_supported_version_code").value as? Number)?.toInt() ?: 0
-                        val currentVersion = (snapshot.child("current_version_code").value as? Number)?.toInt() ?: 0
-                        val url = snapshot.child("update_path_url").value as? String ?: ""
-                        val msg = snapshot.child("update_message").value as? String ?: "Please update to the latest version."
-                        val blockMsg = snapshot.child("blocked_info_message").value as? String ?: "This service is temporarily undergoing maintenance. Please check back later."
-                        
-                        updateUrl = url
-                        updateMessage = msg
-                        blockedInfoMessage = blockMsg
-                        
-                        if (blockAllAccess) {
-                            showBlockAllAccessDialog = true
-                        } else if (currentAppVersionCode < minSupported) {
-                            showForceUpdateDialog = true
-                        } else if (currentAppVersionCode < currentVersion) {
-                            showSoftUpdateDialog = true
+                        // Check version_control node
+                        val vcSnap = snapshot.child("version_control")
+                        if (vcSnap.exists()) {
+                            val blockAllAccess = vcSnap.child("block_all_access").value as? Boolean ?: false
+                            val minSupported = (vcSnap.child("min_supported_version_code").value as? Number)?.toInt() ?: 0
+                            val currentVersion = (vcSnap.child("current_version_code").value as? Number)?.toInt() ?: 0
+                            val url = vcSnap.child("update_path_url").value as? String ?: ""
+                            val msg = vcSnap.child("update_message").value as? String ?: "Please update to the latest version."
+                            val blockMsg = vcSnap.child("blocked_info_message").value as? String ?: "This service is temporarily undergoing maintenance. Please check back later."
+                            
+                            updateUrl = url
+                            updateMessage = msg
+                            blockedInfoMessage = blockMsg
+                            
+                            if (blockAllAccess) {
+                                showBlockAllAccessDialog = true
+                            } else if (currentAppVersionCode < minSupported) {
+                                showForceUpdateDialog = true
+                            } else if (currentAppVersionCode < currentVersion) {
+                                showSoftUpdateDialog = true
+                            }
+                        }
+
+                        // Check promotion node
+                        val promoSnap = snapshot.child("promotion")
+                        val isPromotion = when {
+                            promoSnap.value is Boolean -> promoSnap.value as Boolean
+                            promoSnap.child("promotion").value is Boolean -> promoSnap.child("promotion").value as Boolean
+                            promoSnap.child("promotion").value is String -> (promoSnap.child("promotion").value as String).toBoolean()
+                            snapshot.child("promotion").value is String -> (snapshot.child("promotion").value as String).toBoolean()
+                            else -> false
+                        }
+
+                        android.util.Log.d("PromotionCheck", "isPromotion=$isPromotion, promoSnap.value=${promoSnap.value}, showBlockAllAccessDialog=$showBlockAllAccessDialog, showForceUpdateDialog=$showForceUpdateDialog")
+
+                        if (isPromotion && !showBlockAllAccessDialog && !showForceUpdateDialog) {
+                            val title = (promoSnap.child("prop_title").value as? String) ?: (snapshot.child("prop_title").value as? String) ?: ""
+                            val body = (promoSnap.child("prop_body").value as? String) ?: (snapshot.child("prop_body").value as? String) ?: ""
+                            val downloadLink = (promoSnap.child("prop_download_link").value as? String) ?: (snapshot.child("prop_download_link").value as? String) ?: ""
+                            val maxShowCount = ((promoSnap.child("prop_showCount").value as? Number) ?: (snapshot.child("prop_showCount").value as? Number))?.toInt() ?: 1
+
+                            // Parse prop_icon: support List, DataSnapshot children, comma-separated string or single URL string
+                            val rawIconNode = if (promoSnap.hasChild("prop_icon")) promoSnap.child("prop_icon") else snapshot.child("prop_icon")
+                            val iconUrlsList = mutableListOf<String>()
+                            if (rawIconNode.hasChildren()) {
+                                rawIconNode.children.forEach { child ->
+                                    (child.value as? String)?.trim()?.takeIf { it.isNotEmpty() }?.let { iconUrlsList.add(it) }
+                                }
+                            } else {
+                                val rawStr = (rawIconNode.value as? String)?.trim() ?: ""
+                                if (rawStr.startsWith("{") || rawStr.startsWith("[")) {
+                                    val cleaned = rawStr.removeSurrounding("{", "}").removeSurrounding("[", "]")
+                                    cleaned.split(",").forEach {
+                                        val u = it.trim().removeSurrounding("\"").removeSurrounding("'")
+                                        if (u.isNotEmpty()) iconUrlsList.add(u)
+                                    }
+                                } else if (rawStr.contains(",")) {
+                                    rawStr.split(",").forEach {
+                                        val u = it.trim()
+                                        if (u.isNotEmpty()) iconUrlsList.add(u)
+                                    }
+                                } else if (rawStr.isNotEmpty()) {
+                                    iconUrlsList.add(rawStr)
+                                }
+                            }
+
+                            val prefs = context.getSharedPreferences("promotion_prefs", android.content.Context.MODE_PRIVATE)
+                            val promoId = "${title}_${downloadLink}_${maxShowCount}"
+                            val lastPromoId = prefs.getString("last_promo_id", "") ?: ""
+                            var shownCount = if (lastPromoId == promoId) prefs.getInt("shown_count", 0) else 0
+
+                            android.util.Log.d("PromotionCheck", "title='$title', shownCount=$shownCount, maxShowCount=$maxShowCount, iconUrlsList=$iconUrlsList")
+
+                            if (shownCount < maxShowCount) {
+                                propTitle = title
+                                propBody = body
+                                propDownloadLink = downloadLink
+                                propIconUrls = iconUrlsList
+                                showPromotionDialog = true
+
+                                prefs.edit()
+                                    .putString("last_promo_id", promoId)
+                                    .putInt("shown_count", shownCount + 1)
+                                    .apply()
+                                android.util.Log.d("PromotionCheck", "showPromotionDialog set to TRUE, new shownCount=${shownCount + 1}")
+                            } else {
+                                android.util.Log.d("PromotionCheck", "Promotion skipped because shownCount ($shownCount) >= maxShowCount ($maxShowCount)")
+                            }
                         }
                     }
                 }
@@ -3472,6 +3548,234 @@ fun MainScreen() {
                             shape = androidx.compose.ui.graphics.RectangleShape
                         ) {
                             Text("Update Now", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFA243C))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Promotion Full Screen Card (Dismissible & 10-Second Auto-Hide)
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showPromotionDialog,
+            enter = androidx.compose.animation.slideInVertically(
+                initialOffsetY = { it / 3 },
+                animationSpec = androidx.compose.animation.core.tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(durationMillis = 350)),
+            exit = androidx.compose.animation.slideOutVertically(
+                targetOffsetY = { it / 3 },
+                animationSpec = androidx.compose.animation.core.tween(durationMillis = 280, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+            ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(durationMillis = 280)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            var remainingSeconds by remember { mutableStateOf(10) }
+
+            // Countdown timer: 10s auto-hide with live countdown update
+            LaunchedEffect(showPromotionDialog) {
+                if (showPromotionDialog) {
+                    remainingSeconds = 10
+                    while (remainingSeconds > 0) {
+                        kotlinx.coroutines.delay(1000L)
+                        remainingSeconds--
+                    }
+                    showPromotionDialog = false
+                }
+            }
+
+            val infiniteTransition = rememberInfiniteTransition(label = "promotion_glow")
+            val rotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                    animation = androidx.compose.animation.core.tween(4000, easing = androidx.compose.animation.core.LinearEasing),
+                    repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+                ),
+                label = "border_rotation"
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF0A0A0C))
+                    .systemBarsPadding()
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { showPromotionDialog = false }
+            ) {
+                // Top Right Countdown Timer pill
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 20.dp)
+                        .background(Color.White.copy(alpha = 0.12f), shape = RoundedCornerShape(20.dp))
+                        .border(0.5.dp, Color.White.copy(alpha = 0.2f), shape = RoundedCornerShape(20.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "${remainingSeconds}s",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp, vertical = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Title Header
+                    Text(
+                        text = if (propTitle.isNotEmpty()) propTitle else "Promotion",
+                        style = androidx.compose.material3.MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 28.dp, bottom = 24.dp)
+                    )
+
+                    Spacer(modifier = Modifier.weight(0.2f))
+
+                    // Image / Icon Container with rotating glowing border
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(260.dp)
+                            .rotatingGlowBorder(
+                                rotation = rotation,
+                                strokeWidth = 3.dp,
+                                cornerRadius = 24.dp
+                            )
+                            .padding(3.dp)
+                            .clip(RoundedCornerShape(21.dp))
+                            .background(Color(0xFF141416)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (propIconUrls.isNotEmpty()) {
+                            if (propIconUrls.size == 1) {
+                                AsyncImage(
+                                    model = propIconUrls[0],
+                                    contentDescription = propTitle,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                )
+                            } else {
+                                val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { propIconUrls.size })
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    androidx.compose.foundation.pager.HorizontalPager(
+                                        state = pagerState,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) { page ->
+                                        AsyncImage(
+                                            model = propIconUrls[page],
+                                            contentDescription = "$propTitle $page",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                        )
+                                    }
+
+                                    // Pager indicator dots
+                                    Row(
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .padding(bottom = 12.dp)
+                                    ) {
+                                        repeat(propIconUrls.size) { index ->
+                                            val isSelected = pagerState.currentPage == index
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 3.dp)
+                                                    .size(if (isSelected) 8.dp else 6.dp)
+                                                    .background(
+                                                        color = if (isSelected) Color(0xFFFA243C) else Color.White.copy(alpha = 0.5f),
+                                                        shape = CircleShape
+                                                    )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Star,
+                                contentDescription = null,
+                                tint = Color(0xFFFA243C),
+                                modifier = Modifier.size(80.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Body (Markdown support)
+                    if (propBody.isNotEmpty()) {
+                        val annotatedText = parseMarkdown(propBody)
+                        androidx.compose.foundation.text.ClickableText(
+                            text = annotatedText,
+                            onClick = { offset ->
+                                annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                    .firstOrNull()?.let { annotation ->
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(annotation.item))
+                                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                    }
+                            },
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 16.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 22.sp,
+                                color = Color.Gray
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Action buttons (Get Link & Dismiss)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (propDownloadLink.isNotEmpty()) {
+                            Button(
+                                onClick = {
+                                    showPromotionDialog = false
+                                    try {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(propDownloadLink))
+                                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        // ignore
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFA243C)),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                            ) {
+                                Text("Get", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        TextButton(
+                            onClick = { showPromotionDialog = false },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Text("Dismiss", fontSize = 16.sp, color = Color.Gray)
                         }
                     }
                 }
