@@ -49,28 +49,23 @@ fun WhatsNewDialog(
 ) {
     val features = listOf(
         WhatsNewFeature(
-            title = "Customizable Splash Screen",
-            description = "Enjoy an updated splash screen featuring dynamic theme matching, brand styling, and an animated sweep-gradient border logo.",
-            imageRes = R.drawable.whatsnew_4
+            title = "Polished Playlist UI",
+            description = "All-new Apple Music-style playlist experience with Play/Shuffle controls, animated wave indicators, delete confirmations, and smooth light/dark theme support.",
+            imageRes = R.drawable.whatsnew_1
         ),
         WhatsNewFeature(
-            title = "Redesigned Download Center",
+            title = "More Liquid Glass Elements",
+            description = "Expanded liquid glass UI across more screens — MiniPlayer, playlist actions, and navigation buttons now all shimmer with the signature frosted glass effect.",
+            imageRes = R.drawable.whatsnew_2
+        ),
+        WhatsNewFeature(
+            title = "New Download Center",
             description = "Monitor background downloads in real time with playlist grouping, collapse/expand views, pause/cancel controls, and swipe-to-close drawer UX.",
             imageRes = R.drawable.whatsnew_3
         ),
         WhatsNewFeature(
-            title = "Cloud Sync & Account Control",
-            description = "Manage the data synced to the Musix cloud. Control your cloud preferences or delete your account completely anytime.\nSettings -> Cloud Sync",
-            imageRes = R.drawable.whatsnew_2
-        ),
-        WhatsNewFeature(
-            title = "New Musix Icons",
-            description = "Select the icon that matches your aesthetic.\nSettings -> App Preference -> App Icon",
-            imageRes = R.drawable.whatsnew_1
-        ),
-        WhatsNewFeature(
-            title = "Apple-Style UI & Shuffle Logic",
-            description = "Experience unified Apple Music style Play/Shuffle controls across all playlists with synchronized shuffle state and animated wave indicators.",
+            title = "Bug Fixes & Improvements",
+            description = "Resolved crashes, improved shuffle sync, fixed bottom navbar visibility, and polished the overall app experience for a smoother ride.",
             imageRes = R.drawable.whatsnew_5
         )
     )
