@@ -49,9 +49,19 @@ fun WhatsNewDialog(
 ) {
     val features = listOf(
         WhatsNewFeature(
-            title = "Dynamic App Promotions",
-            description = "Stay updated with real-time app announcements, special offers, and interactive multi-image promo cards with auto-dismiss timers.",
+            title = "Customizable Splash Screen",
+            description = "Enjoy an updated splash screen featuring dynamic theme matching, brand styling, and an animated sweep-gradient border logo.",
             imageRes = R.drawable.whatsnew_4
+        ),
+        WhatsNewFeature(
+            title = "Redesigned Download Center",
+            description = "Monitor background downloads in real time with playlist grouping, collapse/expand views, pause/cancel controls, and swipe-to-close drawer UX.",
+            imageRes = R.drawable.whatsnew_3
+        ),
+        WhatsNewFeature(
+            title = "Cloud Sync & Account Control",
+            description = "Manage the data synced to the Musix cloud. Control your cloud preferences or delete your account completely anytime.\nSettings -> Cloud Sync",
+            imageRes = R.drawable.whatsnew_2
         ),
         WhatsNewFeature(
             title = "New Musix Icons",
@@ -59,23 +69,8 @@ fun WhatsNewDialog(
             imageRes = R.drawable.whatsnew_1
         ),
         WhatsNewFeature(
-            title = "Control What Syncs to Cloud",
-            description = "Manage the data leaving your device to the Musix cloud. If you have security concerns, you can delete your account completely.\nSettings -> Cloud Sync",
-            imageRes = R.drawable.whatsnew_2
-        ),
-        WhatsNewFeature(
-            title = "Download Center",
-            description = "Monitor and manage your background downloads in real time within the Download Center.",
-            imageRes = R.drawable.whatsnew_3
-        ),
-        WhatsNewFeature(
-            title = "Redesigned App Layout",
-            description = "Experience a sleek, high-end Apple Music style dark interface with rounded glow borders and custom visual cards.",
-            imageRes = R.drawable.whatsnew_4
-        ),
-        WhatsNewFeature(
-            title = "Bug Fixes & Optimization",
-            description = "Enjoy zero-lag rotating border shaders, authoritative sync, loop controls, and instant Bluetooth audio routing.",
+            title = "Apple-Style UI & Shuffle Logic",
+            description = "Experience unified Apple Music style Play/Shuffle controls across all playlists with synchronized shuffle state and animated wave indicators.",
             imageRes = R.drawable.whatsnew_5
         )
     )
