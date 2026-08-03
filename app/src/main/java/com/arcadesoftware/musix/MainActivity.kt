@@ -1548,6 +1548,8 @@ class MainActivity : ComponentActivity() {
                 }
             ) {
                 MusixTheme(darkTheme = darkTheme) {
+                    var showSplashScreen by remember { mutableStateOf(true) }
+
                     androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
                         MainScreen()
                         
@@ -1577,11 +1579,17 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        if (showSplashScreen) {
+                            ProfessionalSplashScreen(
+                                onSplashFinished = { showSplashScreen = false }
+                            )
+                        }
+
                         val context = LocalContext.current
                         var showWhatsNew by remember {
                             mutableStateOf(com.arcadesoftware.musix.components.WhatsNewChecker.shouldShowWhatsNew(context))
                         }
-                        if (showWhatsNew) {
+                        if (!showSplashScreen && showWhatsNew) {
                             com.arcadesoftware.musix.components.WhatsNewDialog(
                                 onDismiss = {
                                     com.arcadesoftware.musix.components.WhatsNewChecker.markWhatsNewAsSeen(context)
@@ -1605,6 +1613,192 @@ class MainActivity : ComponentActivity() {
         if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null) {
             com.arcadesoftware.musix.db.FirestoreSyncWorker.enqueue(applicationContext)
             android.util.Log.d("MainActivity", "onStop: FirestoreSyncWorker enqueued")
+        }
+    }
+}
+
+@Composable
+fun ProfessionalSplashScreen(
+    onSplashFinished: () -> Unit
+) {
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+    
+    val selectedIconIndex = remember { sharedPrefs.getInt("app_icon_preference", 0) }
+    val icons = remember {
+        listOf(
+            R.mipmap.ic_iconic,
+            R.mipmap.ic_launcher_bluegradient,
+            R.mipmap.ic_launcher_comic1,
+            R.mipmap.ic_launcher_gradient2,
+            R.mipmap.ic_launcher_mini1,
+            R.mipmap.ic_launcher_orange,
+            R.mipmap.ic_launcher_special1,
+            R.mipmap.ic_launcher_sketch,
+            R.mipmap.ic_launcher_3dsoft,
+            R.mipmap.ic_icon3dsoft
+        )
+    }
+    val currentIconRes = icons.getOrElse(selectedIconIndex) { R.mipmap.ic_iconic }
+
+    var startAnimation by remember { mutableStateOf(false) }
+    var isFadingOut by remember { mutableStateOf(false) }
+
+    val alphaAnim by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isFadingOut) 0f else if (startAnimation) 1f else 0f,
+        animationSpec = tween(durationMillis = 600, easing = LinearEasing),
+        label = "splashAlpha"
+    )
+
+    val scaleAnim by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (startAnimation) 1f else 0.75f,
+        animationSpec = tween(durationMillis = 800, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "splashScale"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "splashGlow")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
+    LaunchedEffect(Unit) {
+        startAnimation = true
+        kotlinx.coroutines.delay(1800)
+        isFadingOut = true
+        kotlinx.coroutines.delay(600)
+        onSplashFinished()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0D0E15))
+            .graphicsLayer { alpha = alphaAnim }
+            .pointerInput(Unit) {},
+        contentAlignment = Alignment.Center
+    ) {
+        // Glowing Ambient Background Blur
+        Box(
+            modifier = Modifier
+                .size(240.dp)
+                .graphicsLayer {
+                    scaleX = scaleAnim * pulseScale * 1.3f
+                    scaleY = scaleAnim * pulseScale * 1.3f
+                    alpha = glowAlpha
+                }
+                .clip(CircleShape)
+                .background(
+                    androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        // Main Icon & Title Content
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = scaleAnim * pulseScale
+                    scaleY = scaleAnim * pulseScale
+                }
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .border(
+                        width = 2.dp,
+                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.tertiary
+                            )
+                        ),
+                        shape = RoundedCornerShape(26.dp)
+                    )
+                    .padding(14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = currentIconRes,
+                    contentDescription = "App Icon",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Fit
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "MUSIX",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 6.sp,
+                    fontSize = 32.sp
+                ),
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Premium Music Experience",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    letterSpacing = 2.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = Color.White.copy(alpha = 0.6f)
+            )
+        }
+
+        // Author / Publisher Branding Footer
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 44.dp)
+        ) {
+            Text(
+                text = "DEVELOPED BY",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    letterSpacing = 2.5.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = Color.White.copy(alpha = 0.4f)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Arcade Softwares",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp
+                ),
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
