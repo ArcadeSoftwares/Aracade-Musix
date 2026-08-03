@@ -394,28 +394,26 @@ fun PlaylistDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 24.dp, vertical = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             // Play / Pause button
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(playButtonBg)
-                                    .clickable {
-                                        if (isThisPlaylistPlaying) {
-                                            PlayerManager.togglePlayPause()
-                                        } else {
-                                            songs?.let { songList ->
-                                                if (songList.isNotEmpty()) {
-                                                    PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                    PlayerManager.playQueue(songList, 0)
-                                                }
+                            LiquidButton(
+                                onClick = {
+                                    if (isThisPlaylistPlaying) {
+                                        PlayerManager.togglePlayPause()
+                                    } else {
+                                        songs?.let { songList ->
+                                            if (songList.isNotEmpty()) {
+                                                PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                                PlayerManager.playQueue(songList, 0)
                                             }
                                         }
-                                    },
-                                contentAlignment = Alignment.Center
+                                    }
+                                },
+                                backdrop = backdrop,
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                surfaceColor = playButtonBg,
+                                tint = playButtonContentColor
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -427,48 +425,46 @@ fun PlaylistDetailScreen(
                                         tint = playButtonContentColor,
                                         modifier = Modifier.size(24.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = if (isThisPlaylistPlaying && isPlaying) "Pause" else "Play",
-                                        color = playButtonContentColor,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
+                                        fontSize = 16.sp,
+                                        color = playButtonContentColor
                                     )
                                 }
                             }
 
                             // Shuffle button
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(shuffleButtonBg)
-                                    .clickable {
-                                        val newShuffleState = !isShuffleEnabled
-                                        PlayerManager.setShuffle(newShuffleState, context)
-                                        songs?.let { songList ->
-                                            if (songList.isNotEmpty()) {
-                                                if (isThisPlaylistPlaying) {
-                                                    val currentSong = PlayerManager.currentSong.value
-                                                    val remainingSongs = songList.filter { it.id != currentSong?.id }
-                                                    if (newShuffleState) {
-                                                        val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songList.shuffled()
-                                                        PlayerManager.queue.value = newQueue
-                                                        PlayerManager.currentQueueIndex.value = 0
-                                                    } else {
-                                                        val originalIndex = songList.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
-                                                        PlayerManager.queue.value = songList
-                                                        PlayerManager.currentQueueIndex.value = originalIndex
-                                                    }
-                                                } else if (newShuffleState) {
-                                                    PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                    PlayerManager.playQueue(songList.shuffled(), 0)
+                            LiquidButton(
+                                onClick = {
+                                    val newShuffleState = !isShuffleEnabled
+                                    PlayerManager.setShuffle(newShuffleState, context)
+                                    songs?.let { songList ->
+                                        if (songList.isNotEmpty()) {
+                                            if (isThisPlaylistPlaying) {
+                                                val currentSong = PlayerManager.currentSong.value
+                                                val remainingSongs = songList.filter { it.id != currentSong?.id }
+                                                if (newShuffleState) {
+                                                    val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songList.shuffled()
+                                                    PlayerManager.queue.value = newQueue
+                                                    PlayerManager.currentQueueIndex.value = 0
+                                                } else {
+                                                    val originalIndex = songList.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
+                                                    PlayerManager.queue.value = songList
+                                                    PlayerManager.currentQueueIndex.value = originalIndex
                                                 }
+                                            } else if (newShuffleState) {
+                                                PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                                PlayerManager.playQueue(songList.shuffled(), 0)
                                             }
                                         }
-                                    },
-                                contentAlignment = Alignment.Center
+                                    }
+                                },
+                                backdrop = backdrop,
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                surfaceColor = shuffleButtonBg,
+                                tint = shuffleButtonContentColor
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -480,12 +476,12 @@ fun PlaylistDetailScreen(
                                         tint = shuffleButtonContentColor,
                                         modifier = Modifier.size(20.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = "Shuffle",
-                                        color = shuffleButtonContentColor,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
+                                        fontSize = 16.sp,
+                                        color = shuffleButtonContentColor
                                     )
                                 }
                             }
