@@ -1779,7 +1779,7 @@ fun ProfessionalSplashScreen(
                 )
         )
 
-        // ── Logo with rotating glow border (same as miniplayer ring) ───────
+        // ── Logo with rotating glow border (same as visual card ring) ───────
         Box(
             modifier = Modifier
                 .size(124.dp)
@@ -1788,21 +1788,23 @@ fun ProfessionalSplashScreen(
                     scaleY = logoScale
                     alpha  = logoAlpha
                 }
-                .com.arcadesoftware.musix.components.rotatingGlowBorder(
+                .rotatingGlowBorder(
                     rotation = borderRotation,
-                    strokeWidth = 3.dp,
+                    strokeWidth = 3.5.dp,
                     cornerRadius = 26.dp
                 )
-                .padding(3.dp)
-                .clip(RoundedCornerShape(23.dp))
+                .padding(3.5.dp)
+                .clip(RoundedCornerShape(22.5.dp))
                 .background(bgColor),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 painter = androidx.compose.ui.res.painterResource(id = currentIconRes),
                 contentDescription = "App Logo",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(22.5.dp)),
+                contentScale = ContentScale.Crop
             )
         }
 
@@ -1968,6 +1970,19 @@ fun MainScreen() {
                             val prefs = context.getSharedPreferences("promotion_prefs", android.content.Context.MODE_PRIVATE)
                             val promoId = "${title}_${downloadLink}_${maxShowCount}"
                             val lastPromoId = prefs.getString("last_promo_id", "") ?: ""
+                            
+                            // If promotion changed, clear old cached data
+                            if (lastPromoId.isNotEmpty() && lastPromoId != promoId) {
+                                val oldUrlsJson = prefs.getString("cached_icon_urls", "") ?: ""
+                                if (oldUrlsJson.isNotEmpty()) {
+                                    val imageLoader = coil.Coil.imageLoader(context)
+                                    oldUrlsJson.split("|").forEach { oldUrl ->
+                                        imageLoader.diskCache?.remove(oldUrl)
+                                        imageLoader.memoryCache?.remove(coil.memory.MemoryCache.Key(oldUrl))
+                                    }
+                                }
+                            }
+
                             var shownCount = if (lastPromoId == promoId) prefs.getInt("shown_count", 0) else 0
 
                             android.util.Log.d("PromotionCheck", "title='$title', shownCount=$shownCount, maxShowCount=$maxShowCount, iconUrlsList=$iconUrlsList")
@@ -1979,12 +1994,53 @@ fun MainScreen() {
                                 propIconUrls = iconUrlsList
                                 showPromotionDialog = true
 
-                                prefs.edit()
-                                    .putString("last_promo_id", promoId)
-                                    .putInt("shown_count", shownCount + 1)
-                                    .apply()
-                                android.util.Log.d("PromotionCheck", "showPromotionDialog set to TRUE, new shownCount=${shownCount + 1}")
+                                val newShownCount = shownCount + 1
+
+                                // Pre-cache images using Coil ImageLoader
+                                val imageLoader = coil.Coil.imageLoader(context)
+                                iconUrlsList.forEach { url ->
+                                    val request = coil.request.ImageRequest.Builder(context)
+                                        .data(url)
+                                        .build()
+                                    imageLoader.enqueue(request)
+                                }
+
+                                if (newShownCount >= maxShowCount) {
+                                    // Count reached limit! Save state and schedule cache eviction
+                                    prefs.edit()
+                                        .putString("last_promo_id", promoId)
+                                        .putInt("shown_count", newShownCount)
+                                        .putString("cached_icon_urls", iconUrlsList.joinToString("|"))
+                                        .apply()
+
+                                    // Clear cache after the current dialog session ends
+                                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        kotlinx.coroutines.delay(12000L) // wait for 10s popup display to complete
+                                        iconUrlsList.forEach { url ->
+                                            imageLoader.diskCache?.remove(url)
+                                            imageLoader.memoryCache?.remove(coil.memory.MemoryCache.Key(url))
+                                        }
+                                        android.util.Log.d("PromotionCheck", "Max count reached ($newShownCount/$maxShowCount). Promotion image cache cleared.")
+                                    }
+                                } else {
+                                    prefs.edit()
+                                        .putString("last_promo_id", promoId)
+                                        .putInt("shown_count", newShownCount)
+                                        .putString("cached_icon_urls", iconUrlsList.joinToString("|"))
+                                        .apply()
+                                }
                             } else {
+                                // Already reached max count: ensure image cache is cleared
+                                val cachedUrlsStr = prefs.getString("cached_icon_urls", "") ?: ""
+                                if (cachedUrlsStr.isNotEmpty()) {
+                                    val imageLoader = coil.Coil.imageLoader(context)
+                                    cachedUrlsStr.split("|").forEach { url ->
+                                        imageLoader.diskCache?.remove(url)
+                                        imageLoader.memoryCache?.remove(coil.memory.MemoryCache.Key(url))
+                                    }
+                                    prefs.edit().remove("cached_icon_urls").apply()
+                                    android.util.Log.d("PromotionCheck", "Cleared promotion image cache on suppressed load.")
+                                }
                                 android.util.Log.d("PromotionCheck", "Promotion skipped because shownCount ($shownCount) >= maxShowCount ($maxShowCount)")
                             }
                         }
