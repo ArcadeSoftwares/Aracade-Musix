@@ -362,15 +362,19 @@ fun PlaylistDetailScreen(
                         }
                     }
 
-                    // Play & Shuffle Buttons (Cupertino style transparent pills)
+                    // Play & Shuffle Buttons
                     item {
+                        val isPlaying by PlayerManager.isPlaying.collectAsState()
+                        val currentPlaylist by PlayerManager.currentPlayingPlaylist.collectAsState()
+                        val isThisPlaylistPlaying = currentPlaylist?.id == playlistItem.id
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 24.dp, vertical = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            // Play button
+                            // Play / Pause button
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -378,10 +382,19 @@ fun PlaylistDetailScreen(
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                                     .clickable {
-                                        songs?.let { songList ->
-                                            if (songList.isNotEmpty()) {
-                                                PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                PlayerManager.playQueue(if (isShuffleEnabled) songList.shuffled() else songList, 0)
+                                        if (isThisPlaylistPlaying) {
+                                            PlayerManager.togglePlayPause()
+                                        } else {
+                                            songs?.let { songList ->
+                                                if (songList.isNotEmpty()) {
+                                                    PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                                    if (isShuffleEnabled) {
+                                                        val randomIndex = (songList.indices).random()
+                                                        PlayerManager.playQueue(songList.shuffled(), randomIndex)
+                                                    } else {
+                                                        PlayerManager.playQueue(songList, 0)
+                                                    }
+                                                }
                                             }
                                         }
                                     },
@@ -391,24 +404,15 @@ fun PlaylistDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
-                                    if (isShuffleEnabled) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.ShuffleOn,
-                                            contentDescription = null,
-                                            tint = appleRed,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Rounded.PlayArrow,
-                                            contentDescription = null,
-                                            tint = appleRed,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = if (isThisPlaylistPlaying && isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                        contentDescription = null,
+                                        tint = appleRed,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (isShuffleEnabled) "Shuffle Play" else "Play",
+                                        text = if (isThisPlaylistPlaying && isPlaying) "Pause" else "Play",
                                         color = appleRed,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
@@ -427,11 +431,16 @@ fun PlaylistDetailScreen(
                                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                     )
                                     .clickable {
+                                        val wasEnabled = PlayerManager.isShuffleEnabled.value
                                         PlayerManager.toggleShuffle(context)
-                                        songs?.let { songList ->
-                                            if (songList.isNotEmpty()) {
-                                                PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                PlayerManager.playQueue(if (PlayerManager.isShuffleEnabled.value) songList.shuffled() else songList, 0)
+                                        val nowEnabled = PlayerManager.isShuffleEnabled.value
+                                        if (nowEnabled && !wasEnabled && !isThisPlaylistPlaying) {
+                                            songs?.let { songList ->
+                                                if (songList.isNotEmpty()) {
+                                                    PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                                    val randomIndex = (songList.indices).random()
+                                                    PlayerManager.playQueue(songList.shuffled(), randomIndex)
+                                                }
                                             }
                                         }
                                     },

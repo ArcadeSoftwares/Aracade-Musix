@@ -1599,7 +1599,7 @@ fun MainScreen() {
     val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
     val activeArtist by PlayerManager.activeArtist.collectAsState()
     val activeUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
-    val showBottomBar = activePlaylistDetail == null && activeUserPlaylist == null
+    val showBottomBar = true
 
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 

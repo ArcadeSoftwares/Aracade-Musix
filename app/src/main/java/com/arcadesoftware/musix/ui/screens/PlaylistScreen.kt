@@ -848,30 +848,48 @@ private fun UserPlaylistDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
-                            // Standard Play button
+                            val isPlaying by PlayerManager.isPlaying.collectAsState()
+                            val currentPlaylist by PlayerManager.currentPlayingPlaylist.collectAsState()
+                            val isThisPlaylistPlaying = currentPlaylist?.id == buildYtPlaylistItem().id
+                            
+                            // Standard Play / Pause button
                             Box(
                                 modifier = Modifier
                                     .weight(1f).height(48.dp)
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                                     .clickable {
-                                        PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                        val songList = songs.map { it.toSongItem() }
-                                        if (songList.isNotEmpty()) {
-                                            if (isShuffleEnabled) {
-                                                val randomIndex = (songList.indices).random()
-                                                PlayerManager.playQueue(songList.shuffled(), randomIndex)
-                                            } else {
-                                                PlayerManager.playQueue(songList, 0)
+                                        if (isThisPlaylistPlaying) {
+                                            PlayerManager.togglePlayPause()
+                                        } else {
+                                            PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
+                                            val songList = songs.map { it.toSongItem() }
+                                            if (songList.isNotEmpty()) {
+                                                if (isShuffleEnabled) {
+                                                    val randomIndex = (songList.indices).random()
+                                                    PlayerManager.playQueue(songList.shuffled(), randomIndex)
+                                                } else {
+                                                    PlayerManager.playQueue(songList, 0)
+                                                }
                                             }
                                         }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = appleRed, modifier = Modifier.size(24.dp))
+                                    Icon(
+                                        imageVector = if (isThisPlaylistPlaying && isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                        contentDescription = null,
+                                        tint = appleRed,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = "Play", color = appleRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(
+                                        text = if (isThisPlaylistPlaying && isPlaying) "Pause" else "Play",
+                                        color = appleRed,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
                                 }
                             }
                             // Clean Shuffle button
@@ -884,12 +902,16 @@ private fun UserPlaylistDetailScreen(
                                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                     )
                                     .clickable {
+                                        val wasEnabled = PlayerManager.isShuffleEnabled.value
                                         PlayerManager.toggleShuffle(context)
-                                        PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                        val songList = songs.map { it.toSongItem() }
-                                        if (songList.isNotEmpty()) {
-                                            val randomIndex = (songList.indices).random()
-                                            PlayerManager.playQueue(songList.shuffled(), randomIndex)
+                                        val nowEnabled = PlayerManager.isShuffleEnabled.value
+                                        if (nowEnabled && !wasEnabled && !isThisPlaylistPlaying) {
+                                            PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
+                                            val songList = songs.map { it.toSongItem() }
+                                            if (songList.isNotEmpty()) {
+                                                val randomIndex = (songList.indices).random()
+                                                PlayerManager.playQueue(songList.shuffled(), randomIndex)
+                                            }
                                         }
                                     },
                                 contentAlignment = Alignment.Center
