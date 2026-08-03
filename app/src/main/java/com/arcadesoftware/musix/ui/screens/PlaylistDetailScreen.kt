@@ -73,9 +73,7 @@ fun PlaylistDetailScreen(
         mutableStateOf(LikedPlaylistsManager.isPlaylistLiked(context, playlistItem.id))
     }
 
-    val alwaysShuffle = remember(context) {
-        context.getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE).getBoolean("always_shuffle", false)
-    }
+    val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
 
     val downloadProgressMap by PlayerManager.downloadProgressMap.collectAsState()
     val downloadedSongsState = remember(context) {
@@ -383,7 +381,7 @@ fun PlaylistDetailScreen(
                                         songs?.let { songList ->
                                             if (songList.isNotEmpty()) {
                                                 PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                PlayerManager.playQueue(if (alwaysShuffle) songList.shuffled() else songList, 0)
+                                                PlayerManager.playQueue(if (isShuffleEnabled) songList.shuffled() else songList, 0)
                                             }
                                         }
                                     },
@@ -393,9 +391,9 @@ fun PlaylistDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
-                                    if (alwaysShuffle) {
+                                    if (isShuffleEnabled) {
                                         Icon(
-                                            imageVector = Icons.Rounded.Shuffle,
+                                            imageVector = Icons.Rounded.ShuffleOn,
                                             contentDescription = null,
                                             tint = appleRed,
                                             modifier = Modifier.size(20.dp)
@@ -410,7 +408,7 @@ fun PlaylistDetailScreen(
                                     }
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (alwaysShuffle) "Shuffle Play" else "Play",
+                                        text = if (isShuffleEnabled) "Shuffle Play" else "Play",
                                         color = appleRed,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
@@ -424,12 +422,16 @@ fun PlaylistDetailScreen(
                                     .weight(1f)
                                     .height(48.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                    .background(
+                                        if (isShuffleEnabled) appleRed.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                    )
                                     .clickable {
+                                        PlayerManager.toggleShuffle(context)
                                         songs?.let { songList ->
                                             if (songList.isNotEmpty()) {
                                                 PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                PlayerManager.playQueue(songList.shuffled(), 0)
+                                                PlayerManager.playQueue(if (PlayerManager.isShuffleEnabled.value) songList.shuffled() else songList, 0)
                                             }
                                         }
                                     },
@@ -439,21 +441,12 @@ fun PlaylistDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
-                                    if (alwaysShuffle) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.ShuffleOn,
-                                            contentDescription = null,
-                                            tint = appleRed,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Shuffle,
-                                            contentDescription = null,
-                                            tint = appleRed,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = if (isShuffleEnabled) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
+                                        contentDescription = null,
+                                        tint = appleRed,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "Shuffle",
@@ -478,7 +471,7 @@ fun PlaylistDetailScreen(
                                     .fillMaxWidth()
                                     .clickable {
                                         songs?.let { songList ->
-                                            if (alwaysShuffle) {
+                                            if (isShuffleEnabled) {
                                                 val shuffled = songList.shuffled().toMutableList()
                                                 shuffled.remove(songItem)
                                                 shuffled.add(0, songItem)

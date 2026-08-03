@@ -121,6 +121,20 @@ object PlayerManager {
     val activeArtist = MutableStateFlow<com.arcadesoftware.musix.ui.screens.LibraryArtist?>(null)
     val activeUserPlaylist = MutableStateFlow<com.arcadesoftware.musix.db.entities.PlaylistEntity?>(null)
     val currentPlayingPlaylist = MutableStateFlow<YTItem?>(null)
+    val isShuffleEnabled = MutableStateFlow(false)
+
+    fun toggleShuffle(context: Context? = appContext) {
+        val next = !isShuffleEnabled.value
+        setShuffle(next, context)
+    }
+
+    fun setShuffle(enabled: Boolean, context: Context? = appContext) {
+        isShuffleEnabled.value = enabled
+        context?.let { ctx ->
+            ctx.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
+                .edit().putBoolean("always_shuffle", enabled).apply()
+        }
+    }
 
     fun toggleRepeatMode() {
         val next = when (repeatMode.value) {
@@ -222,6 +236,7 @@ object PlayerManager {
             // Restore last played song and progress
             val syncSharedPrefs = context.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
             val shouldResume = syncSharedPrefs.getBoolean("resume_playback", true)
+            isShuffleEnabled.value = syncSharedPrefs.getBoolean("always_shuffle", false)
 
             val prefs = context.getSharedPreferences("musix_playback_state", Context.MODE_PRIVATE)
             val lastSongId = prefs.getString("last_song_id", null)

@@ -847,6 +847,7 @@ private fun UserPlaylistDetailScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
+                            val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
                             Box(
                                 modifier = Modifier
                                     .weight(1f).height(48.dp)
@@ -854,29 +855,46 @@ private fun UserPlaylistDetailScreen(
                                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                                     .clickable {
                                         PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                        PlayerManager.playQueue(songs.map { it.toSongItem() }, 0)
+                                        val songList = songs.map { it.toSongItem() }
+                                        PlayerManager.playQueue(if (isShuffleEnabled) songList.shuffled() else songList, 0)
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = appleRed, modifier = Modifier.size(24.dp))
+                                    if (isShuffleEnabled) {
+                                        Icon(Icons.Rounded.ShuffleOn, contentDescription = null, tint = appleRed, modifier = Modifier.size(20.dp))
+                                    } else {
+                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = appleRed, modifier = Modifier.size(24.dp))
+                                    }
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = "Play", color = appleRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(text = if (isShuffleEnabled) "Shuffle Play" else "Play", color = appleRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 }
                             }
                             Box(
                                 modifier = Modifier
                                     .weight(1f).height(48.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                    .background(
+                                        if (isShuffleEnabled) appleRed.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                    )
                                     .clickable {
+                                        PlayerManager.toggleShuffle(context)
                                         PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                        PlayerManager.playQueue(songs.shuffled().map { it.toSongItem() }, 0)
+                                        val songList = songs.map { it.toSongItem() }
+                                        if (songList.isNotEmpty()) {
+                                            PlayerManager.playQueue(if (PlayerManager.isShuffleEnabled.value) songList.shuffled() else songList, 0)
+                                        }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                                    Icon(Icons.Rounded.Shuffle, contentDescription = null, tint = appleRed, modifier = Modifier.size(20.dp))
+                                    Icon(
+                                        imageVector = if (isShuffleEnabled) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
+                                        contentDescription = null,
+                                        tint = appleRed,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(text = "Shuffle", color = appleRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 }
@@ -1585,14 +1603,12 @@ fun BuiltInPlaylistDetailScreen(
     val playHistory by viewModel.playHistory.collectAsState()
     val context = LocalContext.current
     val downloadProgressMap by PlayerManager.downloadProgressMap.collectAsState()
+    val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
     
     var likedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     LaunchedEffect(Unit) {
         likedSongIds = withContext(Dispatchers.IO) { LikedSongsManager.getLikedSongIds(context) }
     }
-    
-    val sharedPrefs = context.getSharedPreferences("musix_profile_settings", android.content.Context.MODE_PRIVATE)
-    var alwaysShuffle by remember { mutableStateOf(sharedPrefs.getBoolean("always_shuffle", false)) }
     
     val title = if (type == "liked") "Liked Songs" else "Downloads"
     val songs: List<SongItem> = if (type == "liked") {
@@ -1679,7 +1695,7 @@ fun BuiltInPlaylistDetailScreen(
                                 onClick = {
                                     if (songs.isNotEmpty()) {
                                         PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
-                                        PlayerManager.playQueue(if (alwaysShuffle) songs.shuffled() else songs, 0)
+                                        PlayerManager.playQueue(if (isShuffleEnabled) songs.shuffled() else songs, 0)
                                     }
                                 },
                                 backdrop = backdrop,
@@ -1689,22 +1705,21 @@ fun BuiltInPlaylistDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
-                                    if (alwaysShuffle) {
+                                    if (isShuffleEnabled) {
                                         Icon(Icons.Rounded.ShuffleOn, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
                                     } else {
                                         Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(if (alwaysShuffle) "Shuffle Play" else "Play", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                                    Text(if (isShuffleEnabled) "Shuffle Play" else "Play", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                                 }
                             }
                             LiquidButton(
                                 onClick = {
-                                    alwaysShuffle = !alwaysShuffle
-                                    sharedPrefs.edit().putBoolean("always_shuffle", alwaysShuffle).apply()
+                                    PlayerManager.toggleShuffle(context)
                                     if (songs.isNotEmpty()) {
                                         PlayerManager.currentPlayingPlaylist.value = downloadsPlaylistItem
-                                        if (alwaysShuffle) {
+                                        if (PlayerManager.isShuffleEnabled.value) {
                                             PlayerManager.playQueue(songs.shuffled(), 0)
                                         } else {
                                             PlayerManager.playQueue(songs, 0)
@@ -1713,19 +1728,24 @@ fun BuiltInPlaylistDetailScreen(
                                 },
                                 backdrop = backdrop,
                                 modifier = Modifier.weight(1f),
-                                surfaceColor = if (alwaysShuffle) appleRed.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
-                                tint = if (alwaysShuffle) appleRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                surfaceColor = if (isShuffleEnabled) appleRed.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                tint = if (isShuffleEnabled) appleRed else MaterialTheme.colorScheme.onSurfaceVariant
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
                                     Icon(
-                                        if (alwaysShuffle) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
-                                        contentDescription = null
+                                        imageVector = if (isShuffleEnabled) Icons.Rounded.ShuffleOn else Icons.Rounded.Shuffle,
+                                        contentDescription = null,
+                                        tint = if (isShuffleEnabled) appleRed else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Shuffle", fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "Shuffle",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isShuffleEnabled) appleRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
