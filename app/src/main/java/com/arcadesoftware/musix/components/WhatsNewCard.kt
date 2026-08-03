@@ -49,6 +49,11 @@ fun WhatsNewDialog(
 ) {
     val features = listOf(
         WhatsNewFeature(
+            title = "Dynamic App Promotions",
+            description = "Stay updated with real-time app announcements, special offers, and interactive multi-image promo cards with auto-dismiss timers.",
+            imageRes = R.drawable.whatsnew_4
+        ),
+        WhatsNewFeature(
             title = "New Musix Icons",
             description = "Select the icon that matches your aesthetic.\nSettings -> App Preference -> App Icon",
             imageRes = R.drawable.whatsnew_1
@@ -70,7 +75,7 @@ fun WhatsNewDialog(
         ),
         WhatsNewFeature(
             title = "Bug Fixes & Optimization",
-            description = "Enjoy zero-lag rotating border shaders, authoritative unlike local sync, loop controls, and instant Bluetooth audio routing.",
+            description = "Enjoy zero-lag rotating border shaders, authoritative sync, loop controls, and instant Bluetooth audio routing.",
             imageRes = R.drawable.whatsnew_5
         )
     )
