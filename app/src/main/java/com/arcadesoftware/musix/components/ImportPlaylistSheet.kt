@@ -345,12 +345,20 @@ private fun ScanQrPane(
                 ),
                 label = "laser_y"
             )
+            val rotation by laserAnim.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(4000, easing = LinearEasing)),
+                label = "border_rotation"
+            )
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(320.dp)
-                    .clip(RoundedCornerShape(28.dp))
+                    .rotatingGlowBorder(rotation = rotation, strokeWidth = 3.dp, cornerRadius = 28.dp)
+                    .padding(3.dp)
+                    .clip(RoundedCornerShape(25.dp))
             ) {
                 // Live camera preview
                 val executor = remember { Executors.newSingleThreadExecutor() }
@@ -437,30 +445,11 @@ private fun ScanQrPane(
                         )
                 )
 
-                // ── Scan zone: gradient-glowing bracket corners ─────────────────
-                val bracketColor1 = Color(0xFFFA243C)
-                val bracketColor2 = Color(0xFF6C63FF)
-                val bracketBrush = Brush.linearGradient(listOf(bracketColor1, bracketColor2))
-
+                // ── Animated laser line inside the scan zone ─────────────────
                 Box(modifier = Modifier.fillMaxSize()) {
-                    GradientScanCorner(
-                        modifier = Modifier.align(Alignment.TopStart).padding(28.dp),
-                        brush = bracketBrush
-                    )
-                    GradientScanCorner(
-                        modifier = Modifier.align(Alignment.TopEnd).padding(28.dp),
-                        brush = bracketBrush, flipH = true
-                    )
-                    GradientScanCorner(
-                        modifier = Modifier.align(Alignment.BottomStart).padding(28.dp),
-                        brush = bracketBrush, flipV = true
-                    )
-                    GradientScanCorner(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(28.dp),
-                        brush = bracketBrush, flipH = true, flipV = true
-                    )
-
-                    // Animated laser line inside the scan zone
+                    val laserColor1 = Color(0xFFFA243C)
+                    val laserColor2 = Color(0xFF6C63FF)
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(0.75f)
@@ -474,8 +463,8 @@ private fun ScanQrPane(
                                 Brush.horizontalGradient(
                                     listOf(
                                         Color.Transparent,
-                                        bracketColor2.copy(alpha = 0.9f),
-                                        bracketColor1.copy(alpha = 0.9f),
+                                        laserColor2.copy(alpha = 0.9f),
+                                        laserColor1.copy(alpha = 0.9f),
                                         Color.Transparent
                                     )
                                 )
@@ -512,45 +501,6 @@ private fun ScanQrPane(
     }
 }
 
-@Composable
-private fun GradientScanCorner(
-    modifier: Modifier = Modifier,
-    brush: Brush,
-    flipH: Boolean = false,
-    flipV: Boolean = false,
-    size: Dp = 32.dp,
-    strokeWidth: Dp = 3.dp
-) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .graphicsLayer(scaleX = if (flipH) -1f else 1f, scaleY = if (flipV) -1f else 1f)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(strokeWidth)
-                .background(brush)
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(strokeWidth)
-                .background(brush)
-        )
-    }
-}
-
-// Keep old ScanCorner for backwards compat but it's no longer used in ScanQrPane
-@Composable
-private fun ScanCorner(modifier: Modifier, flipH: Boolean = false, flipV: Boolean = false) {
-    GradientScanCorner(
-        modifier = modifier,
-        brush = Brush.linearGradient(listOf(Color.White, Color.White)),
-        flipH = flipH,
-        flipV = flipV
-    )
-}
 
 @Composable
 private fun ScanResultCard(

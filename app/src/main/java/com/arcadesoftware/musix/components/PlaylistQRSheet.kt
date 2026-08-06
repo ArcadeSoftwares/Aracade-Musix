@@ -28,117 +28,79 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.util.Base64
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
-import java.security.MessageDigest
-import java.util.concurrent.ConcurrentHashMap
 
-// ── HOW THIS WORKS (Hash-Token QR) ───────────────────────────────────────────
+// ── HOW THIS WORKS (V3 QR) ───────────────────────────────────────────────────
 //
-// Problem: Encoding all song metadata directly into the QR causes the payload
-// length to grow with every song. At ~100+ songs the QR becomes a dense grid
-// of tiny pixels that cameras struggle to scan.
-//
-// Solution — SHA-256 Hash Token:
-//   1. ENCODE: Serialize the full playlist to a compact JSON string, then
-//      compute SHA-256 of that string → 32 bytes = 64 hex chars.  Store the
-//      full JSON in a thread-safe in-memory map (PlaylistTokenStore) keyed by
-//      the hash.  Write only  "musix2:<64-char-hash>"  into the QR.
-//      → The QR payload is ALWAYS 71 chars regardless of 1 or 1000 songs.
-//      → QR stays tiny (Version 3, ~29×29 modules) and scannable forever.
-//
-//   2. DECODE: Read the hash from the QR, look it up in PlaylistTokenStore,
-//      deserialize the JSON.  Works instantly on the same device within the
-//      60-second expiry window — no network needed, no extra storage.
-//
-// Why SHA-256 and not a random UUID?
-//   SHA-256 is deterministic: re-generating the QR for the same playlist
-//   produces the same hash, which is handy for caching.  It's also compact
-//   (64 hex chars) and collision-resistant for any practical playlist size.
+// Hash-tokens (V2) failed for cross-device sharing since the data was only 
+// in-memory on the sender device. To fix this, we must embed the data in the QR.
+// To prevent the QR from becoming too dense (unscannable) for 100+ songs, we:
+//   1. Drop thumbnailUrl (the longest string) - receivers will lazy-load it
+//   2. Use a dense JSON Array of Arrays (not Objects with keys)
+//   3. GZIP compress the JSON string
+//   4. Base64 URL-safe encode it
 // ─────────────────────────────────────────────────────────────────────────────
 
-private const val QR_SCHEME_V2 = "musix2:"
-
-/** Thread-safe in-memory store: hash → (timestamp, serialisedJson) */
-object PlaylistTokenStore {
-    private data class Entry(val createdAt: Long, val json: String)
-    private val store = ConcurrentHashMap<String, Entry>()
-
-    fun put(hash: String, json: String) {
-        store[hash] = Entry(System.currentTimeMillis(), json)
-        // Evict entries older than 5 minutes to avoid memory leaks
-        val cutoff = System.currentTimeMillis() - 5 * 60_000L
-        store.entries.removeIf { it.value.createdAt < cutoff }
-    }
-
-    data class Resolved(val json: String, val createdAt: Long)
-    fun resolve(hash: String): Resolved? = store[hash]?.let { Resolved(it.json, it.createdAt) }
-}
+private const val QR_SCHEME_V3 = "musix3:"
 
 object PlaylistQRCoder {
 
-    /** Converts raw song list → compact JSON string (used for hashing & storage). */
+    /** Converts raw song list → compact JSON string. */
     private fun buildJson(name: String, songs: List<PlayHistoryEntity>): String {
         val arr = JSONArray().apply {
             songs.forEach { s ->
-                put(JSONObject().apply {
-                    put("id", s.id)
-                    put("ti", s.title)
-                    put("ar", s.artistName)
-                    put("th", s.thumbnailUrl)
+                // Array instead of object to save bytes: [id, title, artistName]
+                put(JSONArray().apply {
+                    put(s.id)
+                    put(s.title)
+                    put(s.artistName)
                 })
             }
         }
         return JSONObject().apply {
-            put("v", 2)
+            put("v", 3)
             put("n", name)
             put("s", arr)
         }.toString()
     }
 
-    /** SHA-256 of UTF-8 bytes → lowercase hex string (64 chars). */
-    private fun sha256Hex(input: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val bytes = digest.digest(input.toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
-
-    /**
-     * Encodes a playlist into a fixed-length QR payload string.
-     * Returns "musix2:<64-char-sha256-hash>" — always 71 characters,
-     * regardless of the number of songs.  The full data is stored in
-     * [PlaylistTokenStore] so [decodePlaylist] can retrieve it by hash.
-     */
+    /** Encodes playlist using GZIP and Base64. */
     fun encodePlaylist(name: String, songs: List<PlayHistoryEntity>): String {
-        val json  = buildJson(name, songs)
-        val hash  = sha256Hex(json)
-        PlaylistTokenStore.put(hash, json)
-        return QR_SCHEME_V2 + hash
+        val json = buildJson(name, songs)
+        val bos = ByteArrayOutputStream()
+        GZIPOutputStream(bos).use { it.write(json.toByteArray(Charsets.UTF_8)) }
+        val b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP or Base64.URL_SAFE)
+        return QR_SCHEME_V3 + b64
     }
 
-    /**
-     * Decodes a QR string and returns Triple(playlistName, songs, isExpired).
-     * Returns null if the format is invalid or the token has been evicted.
-     */
+    /** Decodes the Base64 GZIP string back into entities. */
     fun decodePlaylist(raw: String): Triple<String, List<PlayHistoryEntity>, Boolean>? {
-        if (!raw.startsWith(QR_SCHEME_V2)) return null
+        if (!raw.startsWith(QR_SCHEME_V3)) return null
         return try {
-            val hash     = raw.removePrefix(QR_SCHEME_V2)
-            val resolved = PlaylistTokenStore.resolve(hash) ?: return null
-            val root     = JSONObject(resolved.json)
-            val name     = root.getString("n")
-            val arr      = root.getJSONArray("s")
-            val songs    = (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
+            val b64 = raw.removePrefix(QR_SCHEME_V3)
+            val bytes = Base64.decode(b64, Base64.NO_WRAP or Base64.URL_SAFE)
+            val json = GZIPInputStream(bytes.inputStream()).bufferedReader(Charsets.UTF_8).readText()
+            
+            val root = JSONObject(json)
+            val name = root.getString("n")
+            val arr = root.getJSONArray("s")
+            
+            val songs = (0 until arr.length()).map { i ->
+                val songArr = arr.getJSONArray(i)
                 PlayHistoryEntity(
-                    id           = o.getString("id"),
-                    title        = o.getString("ti"),
-                    artistName   = o.getString("ar"),
-                    artistId     = null,
-                    thumbnailUrl = o.getString("th")
+                    id = songArr.getString(0),
+                    title = songArr.getString(1),
+                    artistName = songArr.getString(2),
+                    artistId = null,
+                    thumbnailUrl = "" // Dropped to save space
                 )
             }
-            Triple(name, songs, false) // never expired
+            Triple(name, songs, false)
         } catch (e: Exception) {
             null
         }
