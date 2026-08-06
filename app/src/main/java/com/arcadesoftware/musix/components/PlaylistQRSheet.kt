@@ -70,6 +70,14 @@ object PlaylistQRCoder {
             throw RateLimitException()
         }
 
+        val oneMinAgo = System.currentTimeMillis() - 60_000
+        generationTimestamps.removeAll { it < oneMinAgo }
+        if (generationTimestamps.size >= 5) {
+            blockedUntil = System.currentTimeMillis() + 10 * 60 * 1000
+            throw RateLimitException()
+        }
+        generationTimestamps.add(System.currentTimeMillis())
+
         val currentHash = name.hashCode() * 31 + songs.hashCode()
         if (currentHash == cachedHash && cachedQrData != null) {
             if (cachedDocId != null) {
@@ -87,14 +95,6 @@ object PlaylistQRCoder {
             }
             return cachedQrData!!
         }
-
-        val oneMinAgo = System.currentTimeMillis() - 60_000
-        generationTimestamps.removeAll { it < oneMinAgo }
-        if (generationTimestamps.size >= 5) {
-            blockedUntil = System.currentTimeMillis() + 10 * 60 * 1000
-            throw RateLimitException()
-        }
-        generationTimestamps.add(System.currentTimeMillis())
 
         try {
             val arr = songs.map { s ->
