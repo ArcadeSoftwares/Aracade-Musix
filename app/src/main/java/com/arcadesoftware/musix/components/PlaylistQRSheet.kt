@@ -82,7 +82,7 @@ object PlaylistQRCoder {
         if (currentHash == cachedHash && cachedQrData != null) {
             if (cachedDocId != null) {
                 val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
-                    .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
+                    .setInitialDelay(10, java.util.concurrent.TimeUnit.MINUTES)
                     .setInputData(androidx.work.Data.Builder().putString("docId", cachedDocId).build())
                     .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                     .build()
@@ -117,7 +117,7 @@ object PlaylistQRCoder {
             docRef.set(docData).await()
             
             val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
-                .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
+                .setInitialDelay(10, java.util.concurrent.TimeUnit.MINUTES)
                 .setInputData(androidx.work.Data.Builder().putString("docId", docRef.id).build())
                 .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                 .build()
@@ -304,10 +304,10 @@ fun PlaylistQRSheet(
         }
     }
     
-    var timeLeft by remember { mutableStateOf(60f) }
+    var timeLeft by remember { mutableStateOf(600f) }
     LaunchedEffect(qrData) {
         if (qrData != null) {
-            timeLeft = 60f
+            timeLeft = 600f
             isExpired = false
             while (timeLeft > 0) {
                 kotlinx.coroutines.delay(100)
@@ -402,10 +402,10 @@ fun PlaylistQRSheet(
 
             Spacer(Modifier.height(16.dp))
             if (qrData != null) {
-                val progress = timeLeft / 60f
+                val progress = timeLeft / 600f
                 val progressColor = when {
-                    timeLeft > 15 -> MaterialTheme.colorScheme.primary
-                    timeLeft > 5 -> Color(0xFFFFB300)
+                    timeLeft > 60 -> MaterialTheme.colorScheme.primary
+                    timeLeft > 15 -> Color(0xFFFFB300)
                     else -> MaterialTheme.colorScheme.error
                 }
                 
@@ -419,9 +419,14 @@ fun PlaylistQRSheet(
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
-                val timeColor = if (timeLeft <= 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                val timeColor = if (timeLeft <= 15) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                
+                val minutes = (timeLeft / 60).toInt()
+                val seconds = (timeLeft % 60).toInt()
+                val timeString = String.format("%d:%02d", minutes, seconds)
+                
                 Text(
-                    if (isExpired) "QR Code expired" else "QR Code expires in ${timeLeft.toInt()} seconds",
+                    if (isExpired) "QR Code expired" else "QR Code expires in $timeString",
                     style = MaterialTheme.typography.labelMedium,
                     color = timeColor,
                     fontWeight = FontWeight.Bold,
