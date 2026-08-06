@@ -59,31 +59,59 @@ object PlaylistQRCoder {
     private var cachedQrData: String? = null
     private var cachedDocId: String? = null
 
-    class RateLimitException : Exception("RATE_LIMIT_EXCEEDED")
+    class RateLimitException(val blockedUntil: Long) : Exception("RATE_LIMIT_EXCEEDED")
 
     /** Uploads playlist to Firestore and returns the Document ID. Falls back to compressed payload if offline. */
     suspend fun encodePlaylist(context: android.content.Context, name: String, songs: List<PlayHistoryEntity>): String {
-        val prefs = context.getSharedPreferences("qr_rate_limit", android.content.Context.MODE_PRIVATE)
-        val blockedUntil = prefs.getLong("blocked_until", 0L)
-        if (System.currentTimeMillis() < blockedUntil) {
-            throw RateLimitException()
-        }
-
-        val timestampsStr = prefs.getString("timestamps", "") ?: ""
-        val generationTimestamps = timestampsStr.split(",")
-            .mapNotNull { it.toLongOrNull() }
-            .toMutableList()
-
-        val oneMinAgo = System.currentTimeMillis() - 60_000
-        generationTimestamps.removeAll { it < oneMinAgo }
-        
-        if (generationTimestamps.size >= 5) {
-            prefs.edit().putLong("blocked_until", System.currentTimeMillis() + 10 * 60 * 1000).apply()
-            throw RateLimitException()
+        val ip = try {
+            java.net.URL("https://api.ipify.org").readText()
+        } catch (e: Exception) {
+            "unknown"
         }
         
-        generationTimestamps.add(System.currentTimeMillis())
-        prefs.edit().putString("timestamps", generationTimestamps.joinToString(",")).apply()
+        val rateLimitDocId = "ratelimit_${ip.replace(".", "_").replace(":", "_")}"
+        val db = FirebaseFirestore.getInstance()
+        val rateLimitRef = db.collection("shared_playlists").document(rateLimitDocId)
+        
+        val blockedUntilTime = try {
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(rateLimitRef)
+                val currentTime = System.currentTimeMillis()
+                
+                var blockedUntil = snapshot.getLong("blockedUntil") ?: 0L
+                if (currentTime < blockedUntil) {
+                    return@runTransaction blockedUntil
+                }
+                
+                val rawTimestamps = snapshot.get("timestamps") as? List<*> ?: emptyList<Any>()
+                val timestamps = rawTimestamps.mapNotNull { (it as? Long) ?: (it as? Double)?.toLong() }.toMutableList()
+                
+                val oneMinAgo = currentTime - 60_000
+                timestamps.removeAll { it < oneMinAgo }
+                
+                if (timestamps.size >= 5) {
+                    blockedUntil = currentTime + 10 * 60 * 1000
+                    transaction.set(rateLimitRef, mapOf(
+                        "blockedUntil" to blockedUntil,
+                        "timestamps" to timestamps
+                    ))
+                    return@runTransaction blockedUntil
+                }
+                
+                timestamps.add(currentTime)
+                transaction.set(rateLimitRef, mapOf(
+                    "blockedUntil" to 0L,
+                    "timestamps" to timestamps
+                ))
+                0L
+            }.await()
+        } catch (e: Exception) {
+            0L
+        }
+
+        if (blockedUntilTime > System.currentTimeMillis()) {
+            throw RateLimitException(blockedUntilTime)
+        }
 
         val currentHash = name.hashCode() * 31 + songs.hashCode()
         if (currentHash == cachedHash && cachedQrData != null) {
@@ -296,6 +324,7 @@ fun PlaylistQRSheet(
     val context = LocalContext.current
     var qrData by remember { mutableStateOf<String?>(null) }
     var isRateLimited by remember { mutableStateOf(false) }
+    var rateLimitEndTime by remember { mutableStateOf(0L) }
     var isExpired by remember { mutableStateOf(false) }
 
     LaunchedEffect(playlistName, songs) {
@@ -307,6 +336,22 @@ fun PlaylistQRSheet(
                 qrData = PlaylistQRCoder.encodePlaylist(context, playlistName, songs)
             } catch (e: PlaylistQRCoder.RateLimitException) {
                 isRateLimited = true
+                rateLimitEndTime = e.blockedUntil
+            }
+        }
+    }
+    
+    var rateLimitTimeLeft by remember { mutableStateOf(0) }
+    LaunchedEffect(isRateLimited, rateLimitEndTime) {
+        if (isRateLimited) {
+            while (true) {
+                val left = ((rateLimitEndTime - System.currentTimeMillis()) / 1000).toInt()
+                if (left <= 0) {
+                    isRateLimited = false
+                    break
+                }
+                rateLimitTimeLeft = left
+                kotlinx.coroutines.delay(1000)
             }
         }
     }
@@ -376,11 +421,14 @@ fun PlaylistQRSheet(
             ) {
                 when {
                     isRateLimited -> {
+                        val minutes = rateLimitTimeLeft / 60
+                        val seconds = rateLimitTimeLeft % 60
+                        val timeString = String.format("%d:%02d", minutes, seconds)
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(androidx.compose.material.icons.Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                             Spacer(Modifier.height(16.dp))
                             Text("Rate Limit Exceeded", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                            Text("Please wait 10 minutes", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            Text("Please wait $timeString", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     qrData != null -> {
