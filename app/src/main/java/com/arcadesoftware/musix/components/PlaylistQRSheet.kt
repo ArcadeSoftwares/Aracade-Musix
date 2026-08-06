@@ -71,10 +71,9 @@ object PlaylistTokenStore {
         store.entries.removeIf { it.value.createdAt < cutoff }
     }
 
-    fun get(hash: String): Entry? = store[hash]
-
     data class Resolved(val json: String, val createdAt: Long)
-    fun resolve(hash: String): Resolved? = store[hash]?.let { Resolved(it.json, it.createdAt) }}
+    fun resolve(hash: String): Resolved? = store[hash]?.let { Resolved(it.json, it.createdAt) }
+}
 
 object PlaylistQRCoder {
 

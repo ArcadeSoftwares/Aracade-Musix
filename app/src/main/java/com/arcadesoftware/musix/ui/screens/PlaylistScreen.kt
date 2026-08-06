@@ -580,14 +580,14 @@ fun PlaylistScreen(
                     val playlistId = db.musicDao().insertPlaylist(
                         com.arcadesoftware.musix.db.entities.PlaylistEntity(name = name)
                     )
-                    songs.forEach { song ->
+                    songs.forEachIndexed { index, song ->
+                        // Ensure song metadata exists in play_history for the JOIN query
+                        db.musicDao().insertPlayHistory(song)
                         db.musicDao().insertPlaylistSong(
                             com.arcadesoftware.musix.db.entities.PlaylistSongEntity(
                                 playlistId = playlistId,
                                 songId = song.id,
-                                title = song.title,
-                                artistName = song.artistName,
-                                thumbnailUrl = song.thumbnailUrl
+                                position = index
                             )
                         )
                     }

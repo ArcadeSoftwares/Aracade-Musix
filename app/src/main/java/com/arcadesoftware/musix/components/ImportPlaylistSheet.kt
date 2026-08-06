@@ -367,7 +367,7 @@ private fun ScanQrPane(
                             cameraProviderFuture.addListener({
                                 val cameraProvider = cameraProviderFuture.get()
                                 val preview = Preview.Builder().build()
-                                    .also { it.surfaceProvider = previewView.surfaceProvider }
+                                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
                                 val scanner = BarcodeScanning.getClient()
                                 val analysis = ImageAnalysis.Builder()
