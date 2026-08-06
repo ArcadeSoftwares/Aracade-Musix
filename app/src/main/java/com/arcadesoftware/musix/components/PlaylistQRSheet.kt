@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Warning
 import com.arcadesoftware.musix.db.entities.PlayHistoryEntity
@@ -288,10 +289,12 @@ fun PlaylistQRSheet(
     val context = LocalContext.current
     var qrData by remember { mutableStateOf<String?>(null) }
     var isRateLimited by remember { mutableStateOf(false) }
+    var isExpired by remember { mutableStateOf(false) }
 
     LaunchedEffect(playlistName, songs) {
         qrData = null
         isRateLimited = false
+        isExpired = false
         withContext(Dispatchers.IO) {
             try {
                 qrData = PlaylistQRCoder.encodePlaylist(context, playlistName, songs)
@@ -305,10 +308,15 @@ fun PlaylistQRSheet(
     LaunchedEffect(qrData) {
         if (qrData != null) {
             timeLeft = 60f
+            isExpired = false
             while (timeLeft > 0) {
                 kotlinx.coroutines.delay(100)
                 timeLeft -= 0.1f
             }
+            timeLeft = 0f
+            isExpired = true
+            kotlinx.coroutines.delay(1200)
+            sheetState.hide()
             onDismiss()
         }
     }
@@ -367,10 +375,24 @@ fun PlaylistQRSheet(
                             Text("Please wait 10 minutes", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    qrData != null -> GradientQRCode(
-                        data = qrData!!,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    qrData != null -> {
+                        Box(contentAlignment = Alignment.Center) {
+                            GradientQRCode(
+                                data = qrData!!,
+                                modifier = Modifier.fillMaxSize().graphicsLayer {
+                                    alpha = if (isExpired) 0.2f else 1f
+                                }
+                            )
+                            if (isExpired) {
+                                Text(
+                                    "QR Expired", 
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                     else -> CircularProgressIndicator(
                         color = MaterialTheme.colorScheme.primary,
                         strokeWidth = 2.dp
@@ -381,20 +403,27 @@ fun PlaylistQRSheet(
             Spacer(Modifier.height(16.dp))
             if (qrData != null) {
                 val progress = timeLeft / 60f
+                val progressColor = when {
+                    timeLeft > 15 -> MaterialTheme.colorScheme.primary
+                    timeLeft > 5 -> Color(0xFFFFB300)
+                    else -> MaterialTheme.colorScheme.error
+                }
+                
                 LinearProgressIndicator(
                     progress = progress,
                     modifier = Modifier
                         .fillMaxWidth(0.5f)
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp)),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = progressColor,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
+                val timeColor = if (timeLeft <= 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 Text(
-                    "QR Code expires in ${timeLeft.toInt()} seconds",
+                    if (isExpired) "QR Code expired" else "QR Code expires in ${timeLeft.toInt()} seconds",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = timeColor,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
