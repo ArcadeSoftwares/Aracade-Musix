@@ -59,24 +59,31 @@ object PlaylistQRCoder {
     private var cachedQrData: String? = null
     private var cachedDocId: String? = null
 
-    private val generationTimestamps = mutableListOf<Long>()
-    private var blockedUntil: Long = 0
-
     class RateLimitException : Exception("RATE_LIMIT_EXCEEDED")
 
     /** Uploads playlist to Firestore and returns the Document ID. Falls back to compressed payload if offline. */
     suspend fun encodePlaylist(context: android.content.Context, name: String, songs: List<PlayHistoryEntity>): String {
+        val prefs = context.getSharedPreferences("qr_rate_limit", android.content.Context.MODE_PRIVATE)
+        val blockedUntil = prefs.getLong("blocked_until", 0L)
         if (System.currentTimeMillis() < blockedUntil) {
             throw RateLimitException()
         }
 
+        val timestampsStr = prefs.getString("timestamps", "") ?: ""
+        val generationTimestamps = timestampsStr.split(",")
+            .mapNotNull { it.toLongOrNull() }
+            .toMutableList()
+
         val oneMinAgo = System.currentTimeMillis() - 60_000
         generationTimestamps.removeAll { it < oneMinAgo }
+        
         if (generationTimestamps.size >= 5) {
-            blockedUntil = System.currentTimeMillis() + 10 * 60 * 1000
+            prefs.edit().putLong("blocked_until", System.currentTimeMillis() + 10 * 60 * 1000).apply()
             throw RateLimitException()
         }
+        
         generationTimestamps.add(System.currentTimeMillis())
+        prefs.edit().putString("timestamps", generationTimestamps.joinToString(",")).apply()
 
         val currentHash = name.hashCode() * 31 + songs.hashCode()
         if (currentHash == cachedHash && cachedQrData != null) {
@@ -404,9 +411,10 @@ fun PlaylistQRSheet(
             if (qrData != null) {
                 val progress = timeLeft / 600f
                 val progressColor = when {
-                    timeLeft > 60 -> MaterialTheme.colorScheme.primary
-                    timeLeft > 15 -> Color(0xFFFFB300)
-                    else -> MaterialTheme.colorScheme.error
+                    timeLeft > 300 -> Color(0xFF4CAF50) // Green
+                    timeLeft > 60 -> Color(0xFFFFEB3B)  // Yellow
+                    timeLeft > 15 -> Color(0xFFFF9800)  // Orange
+                    else -> MaterialTheme.colorScheme.error // Red
                 }
                 
                 LinearProgressIndicator(
@@ -425,10 +433,13 @@ fun PlaylistQRSheet(
                 val seconds = (timeLeft % 60).toInt()
                 val timeString = String.format("%d:%02d", minutes, seconds)
                 
+                val isBlinking = timeLeft <= 15
+                val textAlpha = if (isBlinking && (timeLeft % 1f) < 0.5f) 0.3f else 1f
+                
                 Text(
                     if (isExpired) "QR Code expired" else "QR Code expires in $timeString",
                     style = MaterialTheme.typography.labelMedium,
-                    color = timeColor,
+                    color = timeColor.copy(alpha = textAlpha),
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
