@@ -283,6 +283,7 @@ private fun ScanQrPane(
     var scanResult by remember { mutableStateOf<Triple<String, List<PlayHistoryEntity>, Boolean>?>(null) }
     var scanError by remember { mutableStateOf<String?>(null) }
     var isScanning by remember { mutableStateOf(true) }
+    val coroutineScope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -393,12 +394,14 @@ private fun ScanQrPane(
                                             .addOnSuccessListener { barcodes ->
                                                 barcodes.firstOrNull { it.valueType == Barcode.TYPE_TEXT }
                                                     ?.rawValue?.let { raw ->
-                                                        val decoded = PlaylistQRCoder.decodePlaylist(raw)
-                                                        if (decoded != null) {
-                                                            isScanning = false
-                                                            scanResult = decoded
-                                                        } else {
-                                                            scanError = "Not a Musix QR code"
+                                                        coroutineScope.launch {
+                                                            val decoded = PlaylistQRCoder.decodePlaylist(raw)
+                                                            if (decoded != null) {
+                                                                isScanning = false
+                                                                scanResult = decoded
+                                                            } else {
+                                                                scanError = "Not a Musix QR code"
+                                                            }
                                                         }
                                                     }
                                             }

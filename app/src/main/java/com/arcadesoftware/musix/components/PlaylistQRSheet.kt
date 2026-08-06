@@ -35,75 +35,121 @@ import java.util.zip.GZIPOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 
-// ── HOW THIS WORKS (V3 QR) ───────────────────────────────────────────────────
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+
+// ── HOW THIS WORKS (V4 QR) ───────────────────────────────────────────────────
 //
-// Hash-tokens (V2) failed for cross-device sharing since the data was only 
-// in-memory on the sender device. To fix this, we must embed the data in the QR.
-// To prevent the QR from becoming too dense (unscannable) for 100+ songs, we:
-//   1. Drop thumbnailUrl (the longest string) - receivers will lazy-load it
-//   2. Use a dense JSON Array of Arrays (not Objects with keys)
-//   3. GZIP compress the JSON string
-//   4. Base64 URL-safe encode it
+// To support sharing playlists with 1000+ songs without making the QR code
+// an unscannable dense square, we upload the payload to a public Firestore
+// collection (`shared_playlists`) and only encode the Document ID into the QR.
+// The QR payload is always ~27 chars ("musix4:<20-char-doc-id>").
 // ─────────────────────────────────────────────────────────────────────────────
 
-private const val QR_SCHEME_V3 = "musix3:"
+private const val QR_SCHEME_V4 = "musix4:"
+private const val QR_SCHEME_V1 = "musix1:"
+private const val KEY = "MusixAppShareKey1234567890123456"
 
 object PlaylistQRCoder {
 
-    /** Converts raw song list → compact JSON string. */
-    private fun buildJson(name: String, songs: List<PlayHistoryEntity>): String {
-        val arr = JSONArray().apply {
-            songs.forEach { s ->
-                // Array instead of object to save bytes: [id, title, artistName]
-                put(JSONArray().apply {
-                    put(s.id)
-                    put(s.title)
-                    put(s.artistName)
-                })
-            }
-        }
-        return JSONObject().apply {
-            put("v", 3)
-            put("n", name)
-            put("s", arr)
-        }.toString()
-    }
-
-    /** Encodes playlist using GZIP and Base64. */
-    fun encodePlaylist(name: String, songs: List<PlayHistoryEntity>): String {
-        val json = buildJson(name, songs)
-        val bos = ByteArrayOutputStream()
-        GZIPOutputStream(bos).use { it.write(json.toByteArray(Charsets.UTF_8)) }
-        val b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP or Base64.URL_SAFE)
-        return QR_SCHEME_V3 + b64
-    }
-
-    /** Decodes the Base64 GZIP string back into entities. */
-    fun decodePlaylist(raw: String): Triple<String, List<PlayHistoryEntity>, Boolean>? {
-        if (!raw.startsWith(QR_SCHEME_V3)) return null
-        return try {
-            val b64 = raw.removePrefix(QR_SCHEME_V3)
-            val bytes = Base64.decode(b64, Base64.NO_WRAP or Base64.URL_SAFE)
-            val json = GZIPInputStream(bytes.inputStream()).bufferedReader(Charsets.UTF_8).readText()
-            
-            val root = JSONObject(json)
-            val name = root.getString("n")
-            val arr = root.getJSONArray("s")
-            
-            val songs = (0 until arr.length()).map { i ->
-                val songArr = arr.getJSONArray(i)
-                PlayHistoryEntity(
-                    id = songArr.getString(0),
-                    title = songArr.getString(1),
-                    artistName = songArr.getString(2),
-                    artistId = null,
-                    thumbnailUrl = "" // Dropped to save space
+    /** Uploads playlist to Firestore and returns the Document ID. Falls back to compressed payload if offline. */
+    suspend fun encodePlaylist(name: String, songs: List<PlayHistoryEntity>): String {
+        try {
+            val arr = songs.map { s ->
+                mapOf(
+                    "id" to s.id,
+                    "title" to s.title,
+                    "artistName" to s.artistName,
+                    "artistId" to s.artistId,
+                    "thumbnailUrl" to s.thumbnailUrl
                 )
             }
-            Triple(name, songs, false)
+            
+            val docData = mapOf(
+                "name" to name,
+                "songs" to arr,
+                "createdAt" to com.google.firebase.Timestamp.now()
+            )
+            
+            val docRef = FirebaseFirestore.getInstance().collection("shared_playlists").document()
+            docRef.set(docData).await()
+            
+            return QR_SCHEME_V4 + docRef.id
         } catch (e: Exception) {
-            null
+            // Fallback to V1 (Compressed Payload) if Firestore fails (e.g. no internet)
+            val ids = songs.joinToString(",") { it.id }
+            val payload = "n=$name&i=$ids".toByteArray(Charsets.UTF_8)
+            
+            val bos = ByteArrayOutputStream()
+            GZIPOutputStream(bos).use { it.write(payload) }
+            val compressed = bos.toByteArray()
+            
+            val secretKey = javax.crypto.spec.SecretKeySpec(KEY.substring(0, 16).toByteArray(), "AES")
+            val cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding")
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKey)
+            val encrypted = cipher.doFinal(compressed)
+            return QR_SCHEME_V1 + Base64.encodeToString(encrypted, Base64.NO_WRAP)
         }
+    }
+
+    /** Fetches the playlist from Firestore using the Document ID from the QR, or decodes V1. */
+    suspend fun decodePlaylist(raw: String): Triple<String, List<PlayHistoryEntity>, Boolean>? {
+        if (raw.startsWith(QR_SCHEME_V4)) {
+            return try {
+                val docId = raw.removePrefix(QR_SCHEME_V4)
+                val doc = FirebaseFirestore.getInstance().collection("shared_playlists").document(docId).get().await()
+                
+                if (!doc.exists()) return null
+                
+                val name = doc.getString("name") ?: "Shared Playlist"
+                val songsList = doc.get("songs") as? List<Map<String, Any>> ?: emptyList()
+                
+                val songs = songsList.map { songMap ->
+                    PlayHistoryEntity(
+                        id = songMap["id"] as? String ?: "",
+                        title = songMap["title"] as? String ?: "Unknown",
+                        artistName = songMap["artistName"] as? String ?: "Unknown",
+                        artistId = songMap["artistId"] as? String,
+                        thumbnailUrl = songMap["thumbnailUrl"] as? String ?: ""
+                    )
+                }
+                Triple(name, songs, false)
+            } catch (e: Exception) {
+                null
+            }
+        } else if (raw.startsWith(QR_SCHEME_V1)) {
+            return try {
+                val dataStr = raw.removePrefix(QR_SCHEME_V1)
+                val encrypted = Base64.decode(dataStr, Base64.NO_WRAP)
+                
+                val secretKey = javax.crypto.spec.SecretKeySpec(KEY.substring(0, 16).toByteArray(), "AES")
+                val cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding")
+                cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey)
+                val compressed = cipher.doFinal(encrypted)
+                
+                val bis = java.io.ByteArrayInputStream(compressed)
+                val uncompressed = GZIPInputStream(bis).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                
+                val parts = uncompressed.split("&")
+                val namePart = parts.firstOrNull { it.startsWith("n=") }?.substring(2) ?: "Shared Playlist"
+                val idsPart = parts.firstOrNull { it.startsWith("i=") }?.substring(2) ?: ""
+                val ids = idsPart.split(",").filter { it.isNotBlank() }
+                
+                val songs = ids.map { id ->
+                    PlayHistoryEntity(
+                        id = id,
+                        title = "Imported Song",
+                        artistName = "Unknown Artist",
+                        artistId = null,
+                        thumbnailUrl = ""
+                    )
+                }
+                Triple(namePart, songs, false)
+            } catch (e: Exception) {
+                null
+            }
+        }
+        return null
     }
 }
 
@@ -126,7 +172,8 @@ fun GradientQRCode(
                     EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.L,
                     EncodeHintType.MARGIN to 1
                 )
-                bitMatrix = QRCodeWriter().encode(data, BarcodeFormat.QR_CODE, 512, 512, hints)
+                // Use 0, 0 to get the unscaled matrix, which is much more efficient to draw
+                bitMatrix = QRCodeWriter().encode(data, BarcodeFormat.QR_CODE, 0, 0, hints)
             } catch (_: Exception) {
                 bitMatrix = null
             }
@@ -145,7 +192,8 @@ fun GradientQRCode(
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val cW = size.width / matrix.width
                     val cH = size.height / matrix.height
-                    val radius = CornerRadius(cW / 2f, cH / 2f)
+                    // Scale down the corner radius so it doesn't turn into full circles
+                    val radius = CornerRadius(cW / 3.5f, cH / 3.5f)
                     val brush = Brush.linearGradient(
                         colors = listOf(primaryColor, secondaryColor),
                         start = Offset.Zero,

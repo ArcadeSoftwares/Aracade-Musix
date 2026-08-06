@@ -580,16 +580,51 @@ fun PlaylistScreen(
                     val playlistId = db.musicDao().insertPlaylist(
                         com.arcadesoftware.musix.db.entities.PlaylistEntity(name = name)
                     )
-                    songs.forEachIndexed { index, song ->
-                        // Ensure song metadata exists in play_history for the JOIN query
-                        db.musicDao().insertPlayHistory(song)
-                        db.musicDao().insertPlaylistSong(
-                            com.arcadesoftware.musix.db.entities.PlaylistSongEntity(
-                                playlistId = playlistId,
-                                songId = song.id,
-                                position = index
+                    
+                    val needsMetadataFetch = songs.any { it.title == "Imported Song" }
+                    if (needsMetadataFetch) {
+                        val ids = songs.map { it.id }
+                        val fetchedSongs = mutableMapOf<String, com.music.innertube.models.SongItem>()
+                        
+                        ids.chunked(50).forEach { chunk ->
+                            com.music.innertube.YouTube.queue(chunk).onSuccess { items ->
+                                items.forEach { item ->
+                                    fetchedSongs[item.id] = item
+                                }
+                            }
+                        }
+                        
+                        songs.forEachIndexed { index, song ->
+                            val fetched = fetchedSongs[song.id]
+                            val finalSong = if (fetched != null) {
+                                song.copy(
+                                    title = fetched.title,
+                                    artistName = fetched.authors.joinToString(", ") { it.name },
+                                    artistId = fetched.authors.firstOrNull()?.id,
+                                    thumbnailUrl = fetched.thumbnail
+                                )
+                            } else song
+                            
+                            db.musicDao().insertPlayHistory(finalSong)
+                            db.musicDao().insertPlaylistSong(
+                                com.arcadesoftware.musix.db.entities.PlaylistSongEntity(
+                                    playlistId = playlistId,
+                                    songId = finalSong.id,
+                                    position = index
+                                )
                             )
-                        )
+                        }
+                    } else {
+                        songs.forEachIndexed { index, song ->
+                            db.musicDao().insertPlayHistory(song)
+                            db.musicDao().insertPlaylistSong(
+                                com.arcadesoftware.musix.db.entities.PlaylistSongEntity(
+                                    playlistId = playlistId,
+                                    songId = song.id,
+                                    position = index
+                                )
+                            )
+                        }
                     }
                 }
                 showImportSheet = false
