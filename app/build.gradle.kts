@@ -91,4 +91,5 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     coreLibraryDesugaring(libs.desugaring)
+    implementation("com.google.zxing:core:3.5.3")
 }

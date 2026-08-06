@@ -48,6 +48,7 @@ import com.arcadesoftware.musix.db.entities.DownloadedSongEntity
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.arcadesoftware.musix.components.LiquidButton
+import com.arcadesoftware.musix.components.PlaylistQRSheet
 import com.music.innertube.models.Artist
 import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.AlbumItem
@@ -756,6 +757,7 @@ private fun UserPlaylistDetailScreen(
     val appleRed = Color(0xFFFA243C)
     val isShuffleEnabled by PlayerManager.isShuffleEnabled.collectAsState()
     var showEditSheet by remember { mutableStateOf(false) }
+    var showShareSheet by remember { mutableStateOf(false) }
     var showSongOptionsSheet by remember { mutableStateOf<com.arcadesoftware.musix.db.entities.PlayHistoryEntity?>(null) }
     var editName by remember(playlist.name) { mutableStateOf(playlist.name) }
     var editCoverUri by remember(playlist.coverUri) { mutableStateOf(playlist.coverUri) }
@@ -962,7 +964,7 @@ private fun UserPlaylistDetailScreen(
                                             PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
                                             val songList = songs.map { it.toSongItem() }
                                             if (songList.isNotEmpty()) {
-                                                PlayerManager.playQueue(songList, 0)
+                                                PlayerManager.playQueue(songList, 0, forceRandomStart = true)
                                             }
                                         }
                                     },
@@ -996,23 +998,9 @@ private fun UserPlaylistDetailScreen(
                                         val newShuffleState = !isShuffleEnabled
                                         PlayerManager.setShuffle(newShuffleState, context)
                                         val songList = songs.map { it.toSongItem() }
-                                        if (songList.isNotEmpty()) {
-                                            if (isThisPlaylistPlaying) {
-                                                val currentSong = PlayerManager.currentSong.value
-                                                val remainingSongs = songList.filter { it.id != currentSong?.id }
-                                                if (newShuffleState) {
-                                                    val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songList.shuffled()
-                                                    PlayerManager.queue.value = newQueue
-                                                    PlayerManager.currentQueueIndex.value = 0
-                                                } else {
-                                                    val originalIndex = songList.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
-                                                    PlayerManager.queue.value = songList
-                                                    PlayerManager.currentQueueIndex.value = originalIndex
-                                                }
-                                            } else if (newShuffleState) {
-                                                PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                                PlayerManager.playQueue(songList.shuffled(), 0)
-                                            }
+                                        if (songList.isNotEmpty() && !isThisPlaylistPlaying) {
+                                            PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
+                                            PlayerManager.playQueue(songList, 0, forceRandomStart = newShuffleState)
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -1069,13 +1057,7 @@ private fun UserPlaylistDetailScreen(
                             .clickable(interactionSource = interactionSource, indication = null) {
                                 val songList = songs.map { it.toSongItem() }
                                 PlayerManager.currentPlayingPlaylist.value = buildYtPlaylistItem()
-                                if (isShuffleEnabled) {
-                                    val tapped = songList[index]
-                                    val rest = songList.toMutableList().also { it.removeAt(index) }.shuffled()
-                                    PlayerManager.playQueue(listOf(tapped) + rest, 0)
-                                } else {
-                                    PlayerManager.playQueue(songList, index)
-                                }
+                                PlayerManager.playQueue(songList, index)
                             }
                             .background(
                                 if (isPlaying) MaterialTheme.colorScheme.primary.copy(0.07f)
@@ -1243,6 +1225,14 @@ private fun UserPlaylistDetailScreen(
             }
         }
 
+        if (showShareSheet) {
+            PlaylistQRSheet(
+                playlistName = playlist.name,
+                songs = songs,
+                onDismiss = { showShareSheet = false }
+            )
+        }
+
         if (showSongOptionsSheet != null) {
             val selectedSong = showSongOptionsSheet!!
             androidx.compose.material3.ModalBottomSheet(
@@ -1373,12 +1363,25 @@ private fun UserPlaylistDetailScreen(
                 }
             }
 
-            // Top right buttons: Edit & Download (if any song is not downloaded)
+            // Top right buttons: Share, Edit & Download (if any song is not downloaded)
             Row(
                 modifier = Modifier.align(Alignment.CenterEnd),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                LiquidButton(
+                    onClick = { showShareSheet = true },
+                    backdrop = backdrop,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.QrCode,
+                        contentDescription = "Share Playlist",
+                        tint = appleRed,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
                 LiquidButton(
                     onClick = { showEditSheet = true },
                     backdrop = backdrop,

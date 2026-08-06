@@ -123,6 +123,7 @@ object PlayerManager {
     val activeArtist = MutableStateFlow<com.arcadesoftware.musix.ui.screens.LibraryArtist?>(null)
     val activeUserPlaylist = MutableStateFlow<com.arcadesoftware.musix.db.entities.PlaylistEntity?>(null)
     val currentPlayingPlaylist = MutableStateFlow<YTItem?>(null)
+    val originalQueue = MutableStateFlow<List<YTItem>>(emptyList())
     val isShuffleEnabled = MutableStateFlow(false)
 
     fun toggleShuffle(context: Context? = appContext) {
@@ -135,6 +136,25 @@ object PlayerManager {
         context?.let { ctx ->
             ctx.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)
                 .edit().putBoolean("always_shuffle", enabled).apply()
+        }
+        
+        val currentSongId = currentSong.value?.id
+        if (enabled) {
+            val q = originalQueue.value
+            if (q.isNotEmpty()) {
+                val startItem = q.find { it.id == currentSongId } ?: q.first()
+                val rest = q.filter { it.id != startItem.id }.shuffled()
+                val newQ = listOf(startItem) + rest
+                queue.value = newQ
+                currentQueueIndex.value = 0
+            }
+        } else {
+            val q = originalQueue.value
+            if (q.isNotEmpty()) {
+                queue.value = q
+                val idx = q.indexOfFirst { it.id == currentSongId }.coerceAtLeast(0)
+                currentQueueIndex.value = idx
+            }
         }
     }
 
@@ -749,11 +769,21 @@ object PlayerManager {
         activeDownloadJobs[songId] = job
     }
 
-    fun playQueue(items: List<YTItem>, startIndex: Int = 0) {
+    fun playQueue(items: List<YTItem>, startIndex: Int = 0, forceRandomStart: Boolean = false) {
         if (items.isEmpty()) return
-        queue.value = items
-        currentQueueIndex.value = startIndex
-        playInternal(items[startIndex])
+        originalQueue.value = items
+        if (isShuffleEnabled.value) {
+            val startItem = if (forceRandomStart) items.random() else items[startIndex]
+            val rest = items.filter { it.id != startItem.id }.shuffled()
+            val newQueue = listOf(startItem) + rest
+            queue.value = newQueue
+            currentQueueIndex.value = 0
+            playInternal(startItem)
+        } else {
+            queue.value = items
+            currentQueueIndex.value = startIndex
+            playInternal(items[startIndex])
+        }
     }
 
     fun playNext() {

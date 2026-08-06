@@ -50,7 +50,7 @@ fun WhatsNewDialog(
     val features = listOf(
         WhatsNewFeature(
             title = "Polished Playlist UI",
-            description = "All-new Apple Music-style playlist experience with Play/Shuffle controls, animated wave indicators, delete confirmations, and smooth light/dark theme support.",
+            description = "All-new Music-style playlist experience with Play/Shuffle controls, animated wave indicators, delete confirmations, and smooth light/dark theme support.",
             imageRes = R.drawable.whatsnew_1
         ),
         WhatsNewFeature(

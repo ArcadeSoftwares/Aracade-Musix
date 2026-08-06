@@ -410,7 +410,7 @@ fun PlaylistDetailScreen(
                                             songs?.let { songList ->
                                                 if (songList.isNotEmpty()) {
                                                     PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                    PlayerManager.playQueue(songList, 0)
+                                                    PlayerManager.playQueue(songList, 0, forceRandomStart = true)
                                                 }
                                             }
                                         }
@@ -448,23 +448,9 @@ fun PlaylistDetailScreen(
                                         val newShuffleState = !isShuffleEnabled
                                         PlayerManager.setShuffle(newShuffleState, context)
                                         songs?.let { songList ->
-                                            if (songList.isNotEmpty()) {
-                                                if (isThisPlaylistPlaying) {
-                                                    val currentSong = PlayerManager.currentSong.value
-                                                    val remainingSongs = songList.filter { it.id != currentSong?.id }
-                                                    if (newShuffleState) {
-                                                        val newQueue = if (currentSong != null) listOf(currentSong) + remainingSongs.shuffled() else songList.shuffled()
-                                                        PlayerManager.queue.value = newQueue
-                                                        PlayerManager.currentQueueIndex.value = 0
-                                                    } else {
-                                                        val originalIndex = songList.indexOfFirst { it.id == currentSong?.id }.coerceAtLeast(0)
-                                                        PlayerManager.queue.value = songList
-                                                        PlayerManager.currentQueueIndex.value = originalIndex
-                                                    }
-                                                } else if (newShuffleState) {
-                                                    PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                    PlayerManager.playQueue(songList.shuffled(), 0)
-                                                }
+                                            if (songList.isNotEmpty() && !isThisPlaylistPlaying) {
+                                                PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                                PlayerManager.playQueue(songList, 0, forceRandomStart = newShuffleState)
                                             }
                                         }
                                     },
@@ -504,16 +490,8 @@ fun PlaylistDetailScreen(
                                     .fillMaxWidth()
                                     .clickable {
                                         songs?.let { songList ->
-                                            if (isShuffleEnabled) {
-                                                val shuffled = songList.shuffled().toMutableList()
-                                                shuffled.remove(songItem)
-                                                shuffled.add(0, songItem)
-                                                PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                PlayerManager.playQueue(shuffled, 0)
-                                            } else {
-                                                PlayerManager.currentPlayingPlaylist.value = playlistItem
-                                                PlayerManager.playQueue(songList, index)
-                                            }
+                                            PlayerManager.currentPlayingPlaylist.value = playlistItem
+                                            PlayerManager.playQueue(songList, index)
                                         }
                                     }
                                     .padding(horizontal = 24.dp, vertical = 8.dp),
