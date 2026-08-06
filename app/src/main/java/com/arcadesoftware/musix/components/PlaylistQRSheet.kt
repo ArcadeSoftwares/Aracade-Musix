@@ -52,9 +52,30 @@ private const val QR_SCHEME_V1 = "musix1:"
 private const val KEY = "MusixAppShareKey1234567890123456"
 
 object PlaylistQRCoder {
+    private var cachedHash: Int = 0
+    private var cachedQrData: String? = null
+    private var cachedDocId: String? = null
 
     /** Uploads playlist to Firestore and returns the Document ID. Falls back to compressed payload if offline. */
     suspend fun encodePlaylist(context: android.content.Context, name: String, songs: List<PlayHistoryEntity>): String {
+        val currentHash = name.hashCode() * 31 + songs.hashCode()
+        if (currentHash == cachedHash && cachedQrData != null) {
+            if (cachedDocId != null) {
+                val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
+                    .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
+                    .setInputData(androidx.work.Data.Builder().putString("docId", cachedDocId).build())
+                    .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+                    .build()
+                
+                androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                    "delete_qr_$cachedDocId",
+                    androidx.work.ExistingWorkPolicy.REPLACE,
+                    workRequest
+                )
+            }
+            return cachedQrData!!
+        }
+
         try {
             val arr = songs.map { s ->
                 mapOf(
@@ -81,9 +102,17 @@ object PlaylistQRCoder {
                 .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                 .build()
             
-            androidx.work.WorkManager.getInstance(context).enqueue(workRequest)
+            androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                "delete_qr_${docRef.id}",
+                androidx.work.ExistingWorkPolicy.REPLACE,
+                workRequest
+            )
             
-            return QR_SCHEME_V4 + docRef.id
+            val qrData = QR_SCHEME_V4 + docRef.id
+            cachedHash = currentHash
+            cachedQrData = qrData
+            cachedDocId = docRef.id
+            return qrData
         } catch (e: Exception) {
             // Fallback to V1 (Compressed Payload) if Firestore fails (e.g. no internet)
             val ids = songs.joinToString(",") { it.id }
@@ -97,7 +126,11 @@ object PlaylistQRCoder {
             val cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding")
             cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKey)
             val encrypted = cipher.doFinal(compressed)
-            return QR_SCHEME_V1 + Base64.encodeToString(encrypted, Base64.NO_WRAP)
+            val qrData = QR_SCHEME_V1 + Base64.encodeToString(encrypted, Base64.NO_WRAP)
+            cachedHash = currentHash
+            cachedQrData = qrData
+            cachedDocId = null
+            return qrData
         }
     }
 
@@ -243,13 +276,13 @@ fun PlaylistQRSheet(
         }
     }
     
-    var timeLeft by remember { mutableStateOf(60) }
+    var timeLeft by remember { mutableStateOf(60f) }
     LaunchedEffect(qrData) {
         if (qrData != null) {
-            timeLeft = 60
+            timeLeft = 60f
             while (timeLeft > 0) {
-                kotlinx.coroutines.delay(1000)
-                timeLeft--
+                kotlinx.coroutines.delay(100)
+                timeLeft -= 0.1f
             }
             onDismiss()
         }
@@ -312,16 +345,27 @@ fun PlaylistQRSheet(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
             if (qrData != null) {
+                val progress = timeLeft / 60f
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier
+                        .fillMaxWidth(0.5f)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    "QR Code expires in $timeLeft seconds",
+                    "QR Code expires in ${timeLeft.toInt()} seconds",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
             }
             Text(
                 "Scan with Musix to import this playlist",
