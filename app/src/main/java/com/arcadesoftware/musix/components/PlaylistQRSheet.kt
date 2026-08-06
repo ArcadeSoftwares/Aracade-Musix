@@ -1,5 +1,7 @@
 package com.arcadesoftware.musix.components
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.GlobalScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
@@ -58,11 +60,51 @@ object PlaylistQRCoder {
     private var cachedHash: Int = 0
     private var cachedQrData: String? = null
     private var cachedDocId: String? = null
+    private var lastCacheRefreshTime: Long = 0L
 
     class RateLimitException(val blockedUntil: Long) : Exception("RATE_LIMIT_EXCEEDED")
 
     /** Uploads playlist to Firestore and returns the Document ID. Falls back to compressed payload if offline. */
     suspend fun encodePlaylist(context: android.content.Context, name: String, songs: List<PlayHistoryEntity>): String {
+        // 1. Check cache first to allow unlimited reuse of the SAME playlist QR
+        val currentHash = name.hashCode() * 31 + songs.hashCode()
+        if (currentHash == cachedHash && cachedQrData != null) {
+            if (cachedDocId != null && System.currentTimeMillis() - lastCacheRefreshTime > 5000) { // Max 1 refresh per 5 sec
+                val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
+                    .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
+                    .setInputData(androidx.work.Data.Builder().putString("docId", cachedDocId).build())
+                    .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+                    .build()
+                
+                androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                    "delete_qr_$cachedDocId",
+                    androidx.work.ExistingWorkPolicy.REPLACE,
+                    workRequest
+                )
+                lastCacheRefreshTime = System.currentTimeMillis()
+            }
+            return cachedQrData!!
+        }
+
+        // 2. Local SharedPreferences Rate Limit
+        val prefs = context.getSharedPreferences("qr_rate_limit", android.content.Context.MODE_PRIVATE)
+        val localBlockedUntil = prefs.getLong("blocked_until", 0L)
+        if (System.currentTimeMillis() < localBlockedUntil) {
+            throw RateLimitException(localBlockedUntil)
+        }
+
+        val timestampsStr = prefs.getString("timestamps", "") ?: ""
+        val localTimestamps = timestampsStr.split(",").mapNotNull { it.toLongOrNull() }.toMutableList()
+        val oneMinAgo = System.currentTimeMillis() - 60_000
+        localTimestamps.removeAll { it < oneMinAgo }
+        
+        if (localTimestamps.size >= 5) {
+            val newBlocked = System.currentTimeMillis() + 10 * 60 * 1000
+            prefs.edit().putLong("blocked_until", newBlocked).apply()
+            throw RateLimitException(newBlocked)
+        }
+
+        // 3. Firestore IP-based Rate Limit
         val ip = try {
             java.net.URL("https://api.ipify.org").readText()
         } catch (e: Exception) {
@@ -86,7 +128,6 @@ object PlaylistQRCoder {
                 val rawTimestamps = snapshot.get("timestamps") as? List<*> ?: emptyList<Any>()
                 val timestamps = rawTimestamps.mapNotNull { (it as? Long) ?: (it as? Double)?.toLong() }.toMutableList()
                 
-                val oneMinAgo = currentTime - 60_000
                 timestamps.removeAll { it < oneMinAgo }
                 
                 if (timestamps.size >= 5) {
@@ -110,25 +151,28 @@ object PlaylistQRCoder {
         }
 
         if (blockedUntilTime > System.currentTimeMillis()) {
+            // Also sync block to local prefs
+            prefs.edit().putLong("blocked_until", blockedUntilTime).apply()
             throw RateLimitException(blockedUntilTime)
         }
 
-        val currentHash = name.hashCode() * 31 + songs.hashCode()
-        if (currentHash == cachedHash && cachedQrData != null) {
-            if (cachedDocId != null) {
-                val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
-                    .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
-                    .setInputData(androidx.work.Data.Builder().putString("docId", cachedDocId).build())
-                    .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
-                    .build()
-                
-                androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
-                    "delete_qr_$cachedDocId",
-                    androidx.work.ExistingWorkPolicy.REPLACE,
-                    workRequest
-                )
-            }
-            return cachedQrData!!
+        // 4. Update local timestamps since we passed both
+        localTimestamps.add(System.currentTimeMillis())
+        prefs.edit().putString("timestamps", localTimestamps.joinToString(",")).apply()
+
+        // 5. Decentralized GC: Delete old QR codes in case someone's WorkManager was killed
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val dbRef = FirebaseFirestore.getInstance()
+                val oneMinAgo = java.util.Date(System.currentTimeMillis() - 65_000)
+                val oldDocs = dbRef.collection("shared_playlists")
+                    .whereLessThan("createdAt", oneMinAgo)
+                    .get()
+                    .await()
+                for (doc in oldDocs.documents) {
+                    doc.reference.delete()
+                }
+            } catch (e: Exception) {}
         }
 
         try {
@@ -167,9 +211,9 @@ object PlaylistQRCoder {
             cachedHash = currentHash
             cachedQrData = qrData
             cachedDocId = docRef.id
+            lastCacheRefreshTime = System.currentTimeMillis()
             return qrData
         } catch (e: Exception) {
-            // Fallback to V1 (Compressed Payload) if Firestore fails (e.g. no internet)
             val ids = songs.joinToString(",") { it.id }
             val payload = "n=$name&i=$ids".toByteArray(Charsets.UTF_8)
             
@@ -185,6 +229,7 @@ object PlaylistQRCoder {
             cachedHash = currentHash
             cachedQrData = qrData
             cachedDocId = null
+            lastCacheRefreshTime = System.currentTimeMillis()
             return qrData
         }
     }
