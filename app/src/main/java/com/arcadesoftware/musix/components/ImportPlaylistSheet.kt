@@ -636,9 +636,17 @@ private fun SpotifyImportPane(
             },
             supportingText = {
                 if (url.isNotBlank() && playlistId == null) {
-                    Text("⚠ Doesn't look like a valid Spotify playlist URL", color = MaterialTheme.colorScheme.error)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(androidx.compose.material.icons.Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Doesn't look like a valid Spotify playlist URL", color = MaterialTheme.colorScheme.error)
+                    }
                 } else if (playlistId != null) {
-                    Text("✓ Playlist ID: $playlistId", color = Color(0xFF1DB954))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(androidx.compose.material.icons.Icons.Rounded.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Playlist ID: $playlistId", color = Color(0xFF1DB954))
+                    }
                 }
             },
             colors = OutlinedTextFieldDefaults.colors(

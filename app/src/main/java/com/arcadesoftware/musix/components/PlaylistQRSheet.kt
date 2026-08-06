@@ -363,10 +363,11 @@ fun PlaylistQRSheet(
             )
             Spacer(Modifier.height(28.dp))
 
+            val baseModifier = Modifier.size(260.dp)
+            val glowModifier = if (isRateLimited) baseModifier else baseModifier.rotatingGlowBorder(rotation = rotation, strokeWidth = 3.dp, cornerRadius = 24.dp)
+            
             Box(
-                modifier = Modifier
-                    .size(260.dp)
-                    .rotatingGlowBorder(rotation = rotation, strokeWidth = 3.dp, cornerRadius = 24.dp)
+                modifier = glowModifier
                     .padding(4.dp)
                     .clip(RoundedCornerShape(21.dp))
                     .background(Color(0xFF141416))
