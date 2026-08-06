@@ -22,6 +22,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Warning
 import com.arcadesoftware.musix.db.entities.PlayHistoryEntity
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -56,8 +58,17 @@ object PlaylistQRCoder {
     private var cachedQrData: String? = null
     private var cachedDocId: String? = null
 
+    private val generationTimestamps = mutableListOf<Long>()
+    private var blockedUntil: Long = 0
+
+    class RateLimitException : Exception("RATE_LIMIT_EXCEEDED")
+
     /** Uploads playlist to Firestore and returns the Document ID. Falls back to compressed payload if offline. */
     suspend fun encodePlaylist(context: android.content.Context, name: String, songs: List<PlayHistoryEntity>): String {
+        if (System.currentTimeMillis() < blockedUntil) {
+            throw RateLimitException()
+        }
+
         val currentHash = name.hashCode() * 31 + songs.hashCode()
         if (currentHash == cachedHash && cachedQrData != null) {
             if (cachedDocId != null) {
@@ -75,6 +86,14 @@ object PlaylistQRCoder {
             }
             return cachedQrData!!
         }
+
+        val oneMinAgo = System.currentTimeMillis() - 60_000
+        generationTimestamps.removeAll { it < oneMinAgo }
+        if (generationTimestamps.size >= 5) {
+            blockedUntil = System.currentTimeMillis() + 10 * 60 * 1000
+            throw RateLimitException()
+        }
+        generationTimestamps.add(System.currentTimeMillis())
 
         try {
             val arr = songs.map { s ->
@@ -268,11 +287,17 @@ fun PlaylistQRSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     var qrData by remember { mutableStateOf<String?>(null) }
+    var isRateLimited by remember { mutableStateOf(false) }
 
     LaunchedEffect(playlistName, songs) {
         qrData = null
+        isRateLimited = false
         withContext(Dispatchers.IO) {
-            qrData = PlaylistQRCoder.encodePlaylist(context, playlistName, songs)
+            try {
+                qrData = PlaylistQRCoder.encodePlaylist(context, playlistName, songs)
+            } catch (e: PlaylistQRCoder.RateLimitException) {
+                isRateLimited = true
+            }
         }
     }
     
@@ -334,6 +359,14 @@ fun PlaylistQRSheet(
                 contentAlignment = Alignment.Center
             ) {
                 when {
+                    isRateLimited -> {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(androidx.compose.material.icons.Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                            Spacer(Modifier.height(16.dp))
+                            Text("Rate Limit Exceeded", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                            Text("Please wait 10 minutes", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     qrData != null -> GradientQRCode(
                         data = qrData!!,
                         modifier = Modifier.fillMaxSize()
