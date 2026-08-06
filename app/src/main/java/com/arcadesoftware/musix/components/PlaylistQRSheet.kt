@@ -76,7 +76,7 @@ object PlaylistQRCoder {
             docRef.set(docData).await()
             
             val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
-                .setInitialDelay(10, java.util.concurrent.TimeUnit.MINUTES)
+                .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
                 .setInputData(androidx.work.Data.Builder().putString("docId", docRef.id).build())
                 .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                 .build()
@@ -242,6 +242,18 @@ fun PlaylistQRSheet(
             qrData = PlaylistQRCoder.encodePlaylist(context, playlistName, songs)
         }
     }
+    
+    var timeLeft by remember { mutableStateOf(60) }
+    LaunchedEffect(qrData) {
+        if (qrData != null) {
+            timeLeft = 60
+            while (timeLeft > 0) {
+                kotlinx.coroutines.delay(1000)
+                timeLeft--
+            }
+            onDismiss()
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "qr_glow")
     val rotation by infiniteTransition.animateFloat(
@@ -301,6 +313,16 @@ fun PlaylistQRSheet(
             }
 
             Spacer(Modifier.height(12.dp))
+            if (qrData != null) {
+                Text(
+                    "QR Code expires in $timeLeft seconds",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             Text(
                 "Scan with Musix to import this playlist",
                 style = MaterialTheme.typography.labelSmall,
