@@ -599,8 +599,8 @@ fun PlaylistScreen(
                             val finalSong = if (fetched != null) {
                                 song.copy(
                                     title = fetched.title,
-                                    artistName = fetched.authors.joinToString(", ") { it.name },
-                                    artistId = fetched.authors.firstOrNull()?.id,
+                                    artistName = fetched.artists.joinToString(", ") { it.name },
+                                    artistId = fetched.artists.firstOrNull()?.id,
                                     thumbnailUrl = fetched.thumbnail
                                 )
                             } else song

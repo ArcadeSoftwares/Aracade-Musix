@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,7 +54,7 @@ private const val KEY = "MusixAppShareKey1234567890123456"
 object PlaylistQRCoder {
 
     /** Uploads playlist to Firestore and returns the Document ID. Falls back to compressed payload if offline. */
-    suspend fun encodePlaylist(name: String, songs: List<PlayHistoryEntity>): String {
+    suspend fun encodePlaylist(context: android.content.Context, name: String, songs: List<PlayHistoryEntity>): String {
         try {
             val arr = songs.map { s ->
                 mapOf(
@@ -73,6 +74,14 @@ object PlaylistQRCoder {
             
             val docRef = FirebaseFirestore.getInstance().collection("shared_playlists").document()
             docRef.set(docData).await()
+            
+            val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
+                .setInitialDelay(10, java.util.concurrent.TimeUnit.MINUTES)
+                .setInputData(androidx.work.Data.Builder().putString("docId", docRef.id).build())
+                .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+                .build()
+            
+            androidx.work.WorkManager.getInstance(context).enqueue(workRequest)
             
             return QR_SCHEME_V4 + docRef.id
         } catch (e: Exception) {
@@ -224,13 +233,13 @@ fun PlaylistQRSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
+    val context = LocalContext.current
     var qrData by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(playlistName, songs) {
         qrData = null
         withContext(Dispatchers.IO) {
-            qrData = PlaylistQRCoder.encodePlaylist(playlistName, songs)
+            qrData = PlaylistQRCoder.encodePlaylist(context, playlistName, songs)
         }
     }
 
