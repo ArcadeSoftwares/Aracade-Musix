@@ -89,7 +89,7 @@ object PlaylistQRCoder {
         if (currentHash == cachedHash && cachedQrData != null) {
             if (cachedDocId != null) {
                 val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
-                    .setInitialDelay(10, java.util.concurrent.TimeUnit.MINUTES)
+                    .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
                     .setInputData(androidx.work.Data.Builder().putString("docId", cachedDocId).build())
                     .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                     .build()
@@ -124,7 +124,7 @@ object PlaylistQRCoder {
             docRef.set(docData).await()
             
             val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.arcadesoftware.musix.workers.DeleteSharedPlaylistWorker>()
-                .setInitialDelay(10, java.util.concurrent.TimeUnit.MINUTES)
+                .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
                 .setInputData(androidx.work.Data.Builder().putString("docId", docRef.id).build())
                 .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                 .build()
@@ -311,10 +311,10 @@ fun PlaylistQRSheet(
         }
     }
     
-    var timeLeft by remember { mutableStateOf(600f) }
+    var timeLeft by remember { mutableStateOf(60f) }
     LaunchedEffect(qrData) {
         if (qrData != null) {
-            timeLeft = 600f
+            timeLeft = 60f
             isExpired = false
             while (timeLeft > 0) {
                 kotlinx.coroutines.delay(100)
@@ -409,10 +409,10 @@ fun PlaylistQRSheet(
 
             Spacer(Modifier.height(16.dp))
             if (qrData != null) {
-                val progress = timeLeft / 600f
+                val progress = timeLeft / 60f
                 val progressColor = when {
-                    timeLeft > 300 -> Color(0xFF4CAF50) // Green
-                    timeLeft > 60 -> Color(0xFFFFEB3B)  // Yellow
+                    timeLeft > 45 -> Color(0xFF4CAF50) // Green
+                    timeLeft > 30 -> Color(0xFFFFEB3B)  // Yellow
                     timeLeft > 15 -> Color(0xFFFF9800)  // Orange
                     else -> MaterialTheme.colorScheme.error // Red
                 }
