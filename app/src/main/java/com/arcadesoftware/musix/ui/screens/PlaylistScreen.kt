@@ -131,7 +131,7 @@ fun PlaylistScreen(
     var optionsSong by remember { mutableStateOf<DownloadedSongEntity?>(null) }
     val optionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showAddToPlaylistForSong by remember { mutableStateOf<DownloadedSongEntity?>(null) }
-    var showNewPlaylistDialog by remember { mutableStateOf(false) }
+    var showImportSheet by remember { mutableStateOf(false) }
     var newPlaylistNameInput by remember { mutableStateOf("") }
     val selectedUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
     var activeBuiltInPlaylist by remember { mutableStateOf<String?>(null) } // "liked" or "downloads"
@@ -413,7 +413,7 @@ fun PlaylistScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     IconButton(
-                        onClick = { showNewPlaylistDialog = true },
+                        onClick = { showImportSheet = true },
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
@@ -432,7 +432,7 @@ fun PlaylistScreen(
                             .padding(horizontal = 20.dp, vertical = 12.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.5f))
-                            .clickable { showNewPlaylistDialog = true }
+                            .clickable { showImportSheet = true }
                             .padding(20.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -566,100 +566,39 @@ fun PlaylistScreen(
         }
     }
 
-    if (showNewPlaylistDialog) {
-        var dialogName by remember { mutableStateOf("") }
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showNewPlaylistDialog = false; dialogName = "" }
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(28.dp))
-                    .padding(24.dp)
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "New Playlist",
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+    if (showImportSheet) {
+        com.arcadesoftware.musix.components.ImportPlaylistSheet(
+            onDismiss = { showImportSheet = false },
+            onPlaylistCreated = { name ->
+                viewModel.createPlaylist(name)
+                showImportSheet = false
+            },
+            onQrImported = { name, songs ->
+                // Import songs into a new local playlist
+                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                    val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(context)
+                    val playlistId = db.musicDao().insertPlaylist(
+                        com.arcadesoftware.musix.db.entities.PlaylistEntity(name = name)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Enter a name for this playlist.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    TextField(
-                        value = dialogName,
-                        onValueChange = { dialogName = it },
-                        placeholder = { Text("Playlist Title", color = Color.Gray) },
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = MaterialTheme.colorScheme.onBackground,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onBackground
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        androidx.compose.material3.TextButton(
-                            onClick = { showNewPlaylistDialog = false; dialogName = "" },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    songs.forEach { song ->
+                        db.musicDao().insertPlaylistSong(
+                            com.arcadesoftware.musix.db.entities.PlaylistSongEntity(
+                                playlistId = playlistId,
+                                songId = song.id,
+                                title = song.title,
+                                artistName = song.artistName,
+                                thumbnailUrl = song.thumbnailUrl
                             )
-                        ) {
-                            Text("Cancel", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
-
-                        Button(
-                            onClick = {
-                                if (dialogName.isNotBlank()) {
-                                    viewModel.createPlaylist(dialogName.trim())
-                                    showNewPlaylistDialog = false
-                                    dialogName = ""
-                                }
-                            },
-                            enabled = dialogName.isNotBlank(),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFA243C),
-                                contentColor = MaterialTheme.colorScheme.onBackground,
-                                disabledContainerColor = Color(0xFFFA243C).copy(alpha = 0.3f),
-                                disabledContentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                            )
-                        ) {
-                            Text("Create", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
+                        )
                     }
                 }
+                showImportSheet = false
+            },
+            onSpotifyImport = { _ ->
+                // Spotify import handled by the sheet itself; dismiss here
+                showImportSheet = false
             }
-        }
+        )
     }
 
     showAddToPlaylistForSong?.let { song ->

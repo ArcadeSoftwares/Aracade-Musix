@@ -5119,7 +5119,12 @@ fun MiniPlayer(
                             .systemBarsPadding()
                             .padding(horizontal = 24.dp, vertical = 16.dp)
                             .pointerInput(Unit) {
-                                detectDragGestures { change, _ -> change.consume() }
+                                detectVerticalDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    if (dragAmount > 20f) {
+                                        showQueue = false
+                                    }
+                                }
                             }
                     ) {
                         // Header
