@@ -58,7 +58,6 @@ import java.util.concurrent.ConcurrentHashMap
 // ─────────────────────────────────────────────────────────────────────────────
 
 private const val QR_SCHEME_V2 = "musix2:"
-const val QR_EXPIRY_MS = 60_000L   // 60 seconds
 
 /** Thread-safe in-memory store: hash → (timestamp, serialisedJson) */
 object PlaylistTokenStore {
@@ -75,8 +74,7 @@ object PlaylistTokenStore {
     fun get(hash: String): Entry? = store[hash]
 
     data class Resolved(val json: String, val createdAt: Long)
-    fun resolve(hash: String): Resolved? = store[hash]?.let { Resolved(it.json, it.createdAt) }
-}
+    fun resolve(hash: String): Resolved? = store[hash]?.let { Resolved(it.json, it.createdAt) }}
 
 object PlaylistQRCoder {
 
@@ -128,7 +126,6 @@ object PlaylistQRCoder {
         return try {
             val hash     = raw.removePrefix(QR_SCHEME_V2)
             val resolved = PlaylistTokenStore.resolve(hash) ?: return null
-            val expired  = System.currentTimeMillis() - resolved.createdAt > QR_EXPIRY_MS
             val root     = JSONObject(resolved.json)
             val name     = root.getString("n")
             val arr      = root.getJSONArray("s")
@@ -142,7 +139,7 @@ object PlaylistQRCoder {
                     thumbnailUrl = o.getString("th")
                 )
             }
-            Triple(name, songs, expired)
+            Triple(name, songs, false) // never expired
         } catch (e: Exception) {
             null
         }
@@ -220,20 +217,11 @@ fun PlaylistQRSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var qrData by remember { mutableStateOf<String?>(null) }
-    var timeLeft by remember { mutableIntStateOf(60) }
 
     LaunchedEffect(playlistName, songs) {
-        timeLeft = 60
         qrData = null
         withContext(Dispatchers.IO) {
             qrData = PlaylistQRCoder.encodePlaylist(playlistName, songs)
-        }
-    }
-
-    LaunchedEffect(timeLeft) {
-        if (timeLeft > 0) {
-            kotlinx.coroutines.delay(1000)
-            timeLeft--
         }
     }
 
@@ -283,16 +271,6 @@ fun PlaylistQRSheet(
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    timeLeft == 0 -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("⏰", style = MaterialTheme.typography.displaySmall)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Expired",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                     qrData != null -> GradientQRCode(
                         data = qrData!!,
                         modifier = Modifier.fillMaxSize()
@@ -301,37 +279,6 @@ fun PlaylistQRSheet(
                         color = MaterialTheme.colorScheme.primary,
                         strokeWidth = 2.dp
                     )
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            if (timeLeft > 0) {
-                val fraction = timeLeft / 60f
-                val timerColor = when {
-                    fraction > 0.5f -> MaterialTheme.colorScheme.primary
-                    fraction > 0.25f -> Color(0xFFFFA500)
-                    else -> MaterialTheme.colorScheme.error
-                }
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier.fillMaxWidth(0.6f).height(4.dp).clip(RoundedCornerShape(2.dp)),
-                    color = timerColor,
-                    trackColor = timerColor.copy(alpha = 0.2f)
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Expires in ${timeLeft}s",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = timerColor,
-                    fontWeight = FontWeight.SemiBold
-                )
-            } else {
-                TextButton(onClick = {
-                    qrData = null
-                    timeLeft = 60
-                }) {
-                    Text("Regenerate QR")
                 }
             }
 
