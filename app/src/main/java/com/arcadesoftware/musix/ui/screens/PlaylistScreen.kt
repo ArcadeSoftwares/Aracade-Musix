@@ -1201,12 +1201,23 @@ private fun UserPlaylistDetailScreen(
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                songEntity.artistName,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                maxLines = 1
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (downloadedIds.contains(songEntity.id)) {
+                                    Icon(
+                                        Icons.Rounded.DownloadDone,
+                                        contentDescription = "Downloaded",
+                                        tint = appleRed,
+                                        modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                                    )
+                                }
+                                Text(
+                                    songEntity.artistName,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                         IconButton(
                             onClick = {
@@ -1490,12 +1501,27 @@ private fun UserPlaylistDetailScreen(
                 }
             }
 
-            // Top right buttons: Hamburger Menu
+            // Top right buttons: Hamburger Menu & Download
             Row(
                 modifier = Modifier.align(Alignment.CenterEnd),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (undownloadedSongs.isNotEmpty()) {
+                    LiquidButton(
+                        onClick = { triggerPlaylistDownload() },
+                        backdrop = backdrop,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Download,
+                            contentDescription = "Download All",
+                            tint = appleRed,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
                 var showMoreMenu by remember { mutableStateOf(false) }
                 var showDeleteDialog by remember { mutableStateOf(false) }
                 val menuTransitionState = remember { androidx.compose.animation.core.MutableTransitionState(false) }
@@ -2319,12 +2345,23 @@ fun BuiltInPlaylistDetailScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Text(
-                                    song.artists.joinToString { it.name },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (downloadedEntity != null) {
+                                        Icon(
+                                            Icons.Rounded.DownloadDone,
+                                            contentDescription = "Downloaded",
+                                            tint = appleRed,
+                                            modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                                        )
+                                    }
+                                    Text(
+                                        song.artists.joinToString { it.name },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }

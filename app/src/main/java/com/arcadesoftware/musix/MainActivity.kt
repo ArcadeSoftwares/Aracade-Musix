@@ -1110,6 +1110,26 @@ object PlayerManager {
             }
         }
     }
+    fun stopAll() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            exoPlayer?.stop()
+            exoPlayer?.clearMediaItems()
+            currentSong.value = null
+            queue.value = emptyList()
+            originalQueue.value = emptyList()
+            currentQueueIndex.value = 0
+            currentPosition.value = 0L
+            currentDuration.value = 0L
+            isPlaying.value = false
+            triggerNotificationUpdate()
+            appContext?.let { ctx ->
+                val prefs = ctx.getSharedPreferences("musix_playback_state", Context.MODE_PRIVATE)
+                prefs.edit().clear().apply()
+                PlaybackService.stop(ctx)
+            }
+        }
+    }
+
 
     fun togglePlayPause() {
         exoPlayer?.let { player ->
@@ -4473,6 +4493,21 @@ fun MiniPlayer(
                             ) {
                                 focusManager.clearFocus()
                                 PlayerManager.playNext()
+                            }
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "Close",
+                        tint = contentColor.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                focusManager.clearFocus()
+                                PlayerManager.stopAll()
                             }
                     )
                     Spacer(modifier = Modifier.width(4.dp))
