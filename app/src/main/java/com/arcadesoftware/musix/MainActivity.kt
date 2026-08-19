@@ -1905,7 +1905,7 @@ fun MainScreen() {
     val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
     val activeArtist by PlayerManager.activeArtist.collectAsState()
     val activeUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
-    val showBottomBar = true
+    val showBottomBar = activePlaylistDetail == null && activeUserPlaylist == null && activeArtist == null
 
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
@@ -4430,7 +4430,7 @@ fun MiniPlayer(
 
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.72f)
+                            .fillMaxWidth(0.9f)
                             .aspectRatio(1f)
                             .then(
                                 if (!isRingsDisabled) {
@@ -5028,93 +5028,7 @@ fun MiniPlayer(
                         )
                     }
 
-                    // System volume control row at the very bottom
-                    val context = LocalContext.current
-                    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager }
-                    var volumeState by remember {
-                        mutableStateOf(audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
-                    }
-                    val maxVolume = remember { audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) }
-                    var lastVolume by remember { mutableStateOf(volumeState.takeIf { it > 0 } ?: (maxVolume / 2)) }
-                    var volumeDragValue by remember { mutableStateOf<Float?>(null) }
-                    val volumeSliderValue = volumeDragValue
-                        ?: (if (maxVolume > 0) volumeState.toFloat() / maxVolume else 0f)
-
-                    androidx.compose.runtime.DisposableEffect(context) {
-                        val receiver = object : android.content.BroadcastReceiver() {
-                            override fun onReceive(context: Context?, intent: android.content.Intent?) {
-                                volumeState = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
-                            }
-                        }
-                        val filter = android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION")
-                        context.registerReceiver(receiver, filter)
-                        onDispose {
-                            try {
-                                context.unregisterReceiver(receiver)
-                            } catch (e: Exception) {
-                                // Ignore
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val isMuted = volumeState == 0
-                        Icon(
-                            imageVector = if (isMuted) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
-                            contentDescription = "Mute Toggle",
-                            tint = contentColor.copy(alpha = 0.8f),
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    if (isMuted) {
-                                        val target = if (lastVolume > 0) lastVolume else (maxVolume / 2)
-                                        audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, target, 0)
-                                        volumeState = target
-                                    } else {
-                                        lastVolume = volumeState
-                                        audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0)
-                                        volumeState = 0
-                                    }
-                                }
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        val volumeSliderBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
-                        com.arcadesoftware.musix.components.LiquidSlider(
-                            value = { volumeSliderValue },
-                            onValueChange = { newVal ->
-                                volumeDragValue = newVal
-                                val targetVol = (newVal * maxVolume + 0.5f).toInt().coerceIn(0, maxVolume)
-                                if (targetVol != volumeState) {
-                                    audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, targetVol, 0)
-                                    volumeState = targetVol
-                                }
-                            },
-                            onValueChangeFinished = {
-                                volumeDragValue = null
-                            },
-                            valueRange = 0f..1f,
-                            visibilityThreshold = 0.001f,
-                            backdrop = volumeSliderBackdrop,
-                            accentColor = Color(0xFFFA243C),
-                            colors = listOf(
-                                Color(0xFFFA243C),
-                                Color(0xFFFF5E3A),
-                                Color(0xFFFFCC00),
-                                Color(0xFFFA243C)
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
                 }
 
                 // Queue/Playlist Sheet Overlay (Spotify-style)

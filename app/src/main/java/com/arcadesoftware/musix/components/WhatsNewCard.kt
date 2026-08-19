@@ -357,11 +357,17 @@ fun Modifier.rotatingGlowBorder(
         val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
         onDrawWithContent {
             drawContent()
-            // Rotate the color list offset based on animation fraction for smooth flowing effect
+            // Smoothly rotate the colors using linear interpolation
             val n = baseColors.size - 1 // exclude the looped last color
-            val shift = ((rotation % 360f) / 360f * n).toInt()
-            // Build the sweep gradient using all stops, rotated by shift
-            val rotatedColors = (0 until n).map { i -> baseColors[(i + shift) % n] } + listOf(baseColors[shift % n])
+            val exactShift = ((rotation % 360f) / 360f * n)
+            val shift = exactShift.toInt()
+            val fraction = exactShift - shift
+            
+            // Build the sweep gradient using smoothly interpolated stops
+            val rotatedColors = (0 until n).map { i -> 
+                lerpColor(baseColors[(i + shift) % n], baseColors[(i + shift + 1) % n], fraction)
+            } + listOf(lerpColor(baseColors[shift % n], baseColors[(shift + 1) % n], fraction))
+            
             val brush = androidx.compose.ui.graphics.Brush.sweepGradient(
                 colors = rotatedColors,
                 center = centerOffset
