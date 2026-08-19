@@ -1495,28 +1495,76 @@ private fun UserPlaylistDetailScreen(
                         )
                     }
 
-                    DropdownMenu(
-                        expanded = showMoreMenu,
-                        onDismissRequest = { showMoreMenu = false },
-                        shape = RoundedCornerShape(16.dp),
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Share QR Code", fontWeight = FontWeight.Medium) },
-                            leadingIcon = { Icon(Icons.Rounded.QrCode, contentDescription = null, tint = appleRed) },
-                            onClick = {
-                                showMoreMenu = false
-                                showShareSheet = true
+                    if (showMoreMenu) {
+                        androidx.compose.ui.window.Popup(
+                            alignment = Alignment.TopEnd,
+                            offset = androidx.compose.ui.unit.IntOffset(0, 140),
+                            onDismissRequest = { showMoreMenu = false }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(220.dp)
+                                    .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
+                                    .drawBackdrop(
+                                        backdrop = backdrop,
+                                        shape = { RoundedCornerShape(20.dp) },
+                                        effects = {
+                                            com.kyant.backdrop.effects.vibrancy()
+                                            com.kyant.backdrop.effects.blur(16f.dp.toPx())
+                                            com.kyant.backdrop.effects.lens(8f.dp.toPx(), 24f.dp.toPx())
+                                        },
+                                        onDrawSurface = {
+                                            drawRect(surfaceColor.copy(alpha = 0.5f))
+                                            drawRect(Color.Gray.copy(alpha = 0.15f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
+                                        }
+                                    )
+                            ) {
+                                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showMoreMenu = false; showShareSheet = true }
+                                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(androidx.compose.material.icons.Icons.Rounded.IosShare, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Text("Share", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showMoreMenu = false; showEditSheet = true }
+                                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Rounded.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Text("Edit Playlist", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { 
+                                                showMoreMenu = false
+                                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                                    db.musicDao().deletePlaylist(playlist.id)
+                                                    com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
+                                                }
+                                                onBack()
+                                            }
+                                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(22.dp))
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Text("Delete", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Color.Red)
+                                    }
+                                }
                             }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Edit Playlist", fontWeight = FontWeight.Medium) },
-                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null, tint = appleRed) },
-                            onClick = {
-                                showMoreMenu = false
-                                showEditSheet = true
-                            }
-                        )
+                        }
                     }
                 }
             }
