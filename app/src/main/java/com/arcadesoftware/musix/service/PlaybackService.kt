@@ -156,6 +156,9 @@ class PlaybackService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        if (PlayerManager.isPlaying.value == true) {
+            return // Keep playing in background when swiped away
+        }
         PlayerManager.exoPlayer?.stop()
         PlayerManager.exoPlayer?.release()
         PlayerManager.exoPlayer = null

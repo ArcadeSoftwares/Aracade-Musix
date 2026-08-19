@@ -1506,8 +1506,14 @@ private fun UserPlaylistDetailScreen(
                         androidx.compose.ui.window.Popup(
                             alignment = Alignment.TopEnd,
                             offset = androidx.compose.ui.unit.IntOffset(0, 0), // Perfectly overlap the button
-                            properties = androidx.compose.ui.window.PopupProperties(focusable = true),
-                            onDismissRequest = { menuTransitionState.targetState = false }
+                            properties = androidx.compose.ui.window.PopupProperties(
+                                focusable = false,
+                                dismissOnClickOutside = true
+                            ),
+                            onDismissRequest = { 
+                                menuTransitionState.targetState = false
+                                showMoreMenu = false 
+                            }
                         ) {
                             androidx.compose.animation.AnimatedVisibility(
                                 visibleState = menuTransitionState,
