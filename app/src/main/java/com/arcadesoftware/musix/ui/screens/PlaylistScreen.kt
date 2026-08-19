@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1429,7 +1430,7 @@ private fun UserPlaylistDetailScreen(
 
             // Mini title pill (appears when scrolled)
             Box(
-                modifier = Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = 110.dp),
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedVisibility(
@@ -1442,7 +1443,7 @@ private fun UserPlaylistDetailScreen(
                         backdrop = backdrop,
                         isInteractive = false,
                         surfaceColor = MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
-                        modifier = Modifier.height(48.dp).widthIn(min = 120.dp, max = 220.dp)
+                        modifier = Modifier.height(48.dp).widthIn(max = 160.dp)
                     ) {
                         val isSpotifyImport = playlist.name.endsWith(" (Imported from Spotify)")
                         val displayName = if (isSpotifyImport) playlist.name.removeSuffix(" (Imported from Spotify)") else playlist.name
@@ -1451,8 +1452,8 @@ private fun UserPlaylistDetailScreen(
                             text = displayName,
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 17.sp),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onBackground
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.basicMarquee()
                         )
                     }
                 }
@@ -1465,43 +1466,35 @@ private fun UserPlaylistDetailScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 LiquidButton(
-                    onClick = { showShareSheet = true },
+                    onClick = { /* Handle inside row for dynamic ripple effect */ },
                     backdrop = backdrop,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.height(48.dp),
+                    isInteractive = false
                 ) {
-                    Icon(
-                        Icons.Rounded.QrCode,
-                        contentDescription = "Share Playlist",
-                        tint = appleRed,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                LiquidButton(
-                    onClick = { showEditSheet = true },
-                    backdrop = backdrop,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        Icons.Rounded.Edit,
-                        contentDescription = "Edit Playlist",
-                        tint = appleRed,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                if (undownloadedSongs.isNotEmpty()) {
-                    LiquidButton(
-                        onClick = { triggerPlaylistDownload() },
-                        backdrop = backdrop,
-                        modifier = Modifier.size(48.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Rounded.Download,
-                            contentDescription = "Download Playlist",
+                            Icons.Rounded.QrCode,
+                            contentDescription = "Share Playlist",
                             tint = appleRed,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(20.dp).clickable { showShareSheet = true }
                         )
+                        Icon(
+                            Icons.Rounded.Edit,
+                            contentDescription = "Edit Playlist",
+                            tint = appleRed,
+                            modifier = Modifier.size(20.dp).clickable { showEditSheet = true }
+                        )
+                        if (undownloadedSongs.isNotEmpty()) {
+                            Icon(
+                                Icons.Rounded.Download,
+                                contentDescription = "Download Playlist",
+                                tint = appleRed,
+                                modifier = Modifier.size(20.dp).clickable { triggerPlaylistDownload() }
+                            )
+                        }
                     }
                 }
             }

@@ -832,6 +832,10 @@ object PlayerManager {
             if (currentIndex > 0) {
                 currentQueueIndex.value = currentIndex - 1
                 playInternal(currentQueue[currentIndex - 1])
+            } else if (currentQueue.isNotEmpty()) {
+                val lastIndex = currentQueue.size - 1
+                currentQueueIndex.value = lastIndex
+                playInternal(currentQueue[lastIndex])
             } else {
                 exoPlayer?.seekTo(0)
             }
