@@ -49,23 +49,18 @@ fun WhatsNewDialog(
 ) {
     val features = listOf(
         WhatsNewFeature(
-            title = "Polished Playlist UI",
-            description = "All-new Music-style playlist experience with Play/Shuffle controls, animated wave indicators, delete confirmations, and smooth light/dark theme support.",
+            title = "Share Your Playlist",
+            description = "Share your playlist with friends using a single QR code.",
             imageRes = R.drawable.whatsnew_1
         ),
         WhatsNewFeature(
-            title = "More Liquid Glass Elements",
-            description = "Expanded liquid glass UI across more screens — MiniPlayer, playlist actions, and navigation buttons now all shimmer with the signature frosted glass effect.",
+            title = "Easy Spotify Migration",
+            description = "Seamlessly transfer your Spotify playlists to Musix.",
             imageRes = R.drawable.whatsnew_2
         ),
         WhatsNewFeature(
-            title = "New Download Center",
-            description = "Monitor background downloads in real time with playlist grouping, collapse/expand views, pause/cancel controls, and swipe-to-close drawer UX.",
-            imageRes = R.drawable.whatsnew_3
-        ),
-        WhatsNewFeature(
             title = "Bug Fixes & Improvements",
-            description = "Resolved crashes, improved shuffle sync, fixed bottom navbar visibility, and polished the overall app experience for a smoother ride.",
+            description = "Improved performance, refined logic, and fixed minor bugs.",
             imageRes = R.drawable.whatsnew_5
         )
     )
@@ -279,7 +274,7 @@ object WhatsNewChecker {
     fun shouldShowWhatsNew(context: Context): Boolean {
         // FOR TESTING: Returns true unconditionally so you can preview and test.
         // Set to false when moving to production/final.
-        val testingMode = false
+        val testingMode = true
         if (testingMode) return true
 
         val sharedPrefs = context.getSharedPreferences("whats_new_prefs", Context.MODE_PRIVATE)

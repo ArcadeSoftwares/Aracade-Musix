@@ -82,6 +82,7 @@ import com.arcadesoftware.musix.updater.MusixUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.music.innertube.models.YTItem
 import coil.compose.AsyncImage
+import coil.imageLoader
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 
@@ -1387,25 +1388,16 @@ object PlayerManager {
                 for (url in listOf(highResUrl, thumbUrl)) {
                     if (bitmap != null) break
                     try {
-                        val client = okhttp3.OkHttpClient.Builder()
-                            .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        val request = coil.request.ImageRequest.Builder(context)
+                            .data(url)
+                            .allowHardware(false)
                             .build()
-                        val request = okhttp3.Request.Builder()
-                            .url(url)
-                            .addHeader("User-Agent", "Mozilla/5.0")
-                            .addHeader("Referer", "https://www.youtube.com/")
-                            .build()
-                        val response = client.newCall(request).execute()
-                        if (response.isSuccessful) {
-                            val bytes = response.body?.bytes()
-                            if (bytes != null) {
-                                bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            }
+                        val result = context.imageLoader.execute(request)
+                        if (result is coil.request.SuccessResult) {
+                            bitmap = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
                         }
-                        response.close()
                     } catch (e: Exception) {
-                        android.util.Log.w(TAG, "Failed to load art from $url: ${e.message}")
+                        android.util.Log.w(TAG, "Failed to load art with Coil from $url: ${e.message}")
                     }
                 }
 
@@ -4553,24 +4545,6 @@ fun MiniPlayer(
                                     .background(contentColor.copy(alpha = 0.3f))
                             )
                         }
-
-                        // Close button to completely stop music
-                        Icon(
-                            Icons.Rounded.Close,
-                            contentDescription = "Stop Player",
-                            tint = contentColor.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .size(28.dp)
-                                .clickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    focusManager.clearFocus()
-                                    expanded = false
-                                    PlayerManager.stopAll()
-                                }
-                        )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 

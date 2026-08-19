@@ -1316,6 +1316,12 @@ private fun UserPlaylistDetailScreen(
                             onClick = {
                                 scope.launch(Dispatchers.IO) {
                                     db.musicDao().updatePlaylist(playlist.id, editName.trim(), editCoverUri)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        com.arcadesoftware.musix.PlayerManager.activeUserPlaylist.value = playlist.copy(
+                                            name = editName.trim(),
+                                            coverUri = editCoverUri
+                                        )
+                                    }
                                 }
                                 showEditSheet = false
                             },
