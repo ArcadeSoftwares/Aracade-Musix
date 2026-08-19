@@ -1476,6 +1476,12 @@ private fun UserPlaylistDetailScreen(
                     menuTransitionState.targetState = true
                 }
 
+                androidx.compose.runtime.LaunchedEffect(listState.isScrollInProgress) {
+                    if (listState.isScrollInProgress && menuTransitionState.targetState) {
+                        menuTransitionState.targetState = false
+                    }
+                }
+
                 Box {
                     val buttonAlpha by androidx.compose.animation.core.animateFloatAsState(
                         targetValue = if (menuTransitionState.targetState) 0f else 1f,
@@ -1500,6 +1506,7 @@ private fun UserPlaylistDetailScreen(
                         androidx.compose.ui.window.Popup(
                             alignment = Alignment.TopEnd,
                             offset = androidx.compose.ui.unit.IntOffset(0, 0), // Perfectly overlap the button
+                            properties = androidx.compose.ui.window.PopupProperties(focusable = true),
                             onDismissRequest = { menuTransitionState.targetState = false }
                         ) {
                             androidx.compose.animation.AnimatedVisibility(
