@@ -122,6 +122,7 @@ object PlayerManager {
     val activeArtistId = MutableStateFlow<String?>(null)
     val activeArtist = MutableStateFlow<com.arcadesoftware.musix.ui.screens.LibraryArtist?>(null)
     val activeUserPlaylist = MutableStateFlow<com.arcadesoftware.musix.db.entities.PlaylistEntity?>(null)
+    val activeBuiltInPlaylist = MutableStateFlow<String?>(null)
     val currentPlayingPlaylist = MutableStateFlow<YTItem?>(null)
     val originalQueue = MutableStateFlow<List<YTItem>>(emptyList())
     val isShuffleEnabled = MutableStateFlow(false)
@@ -1905,7 +1906,8 @@ fun MainScreen() {
     val activePlaylistDetail by PlayerManager.activePlaylistDetail.collectAsState()
     val activeArtist by PlayerManager.activeArtist.collectAsState()
     val activeUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
-    val showBottomBar = activePlaylistDetail == null && activeUserPlaylist == null && activeArtist == null
+    val activeBuiltInPlaylist by PlayerManager.activeBuiltInPlaylist.collectAsState()
+    val showBottomBar = activePlaylistDetail == null && activeUserPlaylist == null && activeArtist == null && activeBuiltInPlaylist == null
 
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
@@ -2126,12 +2128,14 @@ fun MainScreen() {
     val scope = rememberCoroutineScope()
 
     androidx.activity.compose.BackHandler(
-        enabled = showAccountSheet || showDownloadsScreen || activePlaylistDetail != null || activeArtist != null || activeUserPlaylist != null
+        enabled = showAccountSheet || showDownloadsScreen || activePlaylistDetail != null || activeArtist != null || activeUserPlaylist != null || activeBuiltInPlaylist != null
     ) {
         if (showAccountSheet) {
             showAccountSheet = false
         } else if (showDownloadsScreen) {
             showDownloadsScreen = false
+        } else if (activeBuiltInPlaylist != null) {
+            PlayerManager.activeBuiltInPlaylist.value = null
         } else if (activePlaylistDetail != null) {
             PlayerManager.activePlaylistDetail.value = null
         } else if (activeArtist != null) {

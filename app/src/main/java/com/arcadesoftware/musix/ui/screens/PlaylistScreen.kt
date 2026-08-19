@@ -141,11 +141,7 @@ fun PlaylistScreen(
     var spotifyImportStatus by remember { mutableStateOf("") }
     var newPlaylistNameInput by remember { mutableStateOf("") }
     val selectedUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
-    var activeBuiltInPlaylist by remember { mutableStateOf<String?>(null) } // "liked" or "downloads"
-    
-    androidx.activity.compose.BackHandler(enabled = activeBuiltInPlaylist != null) {
-        activeBuiltInPlaylist = null
-    }
+    val activeBuiltInPlaylist by com.arcadesoftware.musix.PlayerManager.activeBuiltInPlaylist.collectAsState()
 
     LaunchedEffect(activePlaylistDetail, userPlaylists) {
         if (activePlaylistDetail == null) {
@@ -247,7 +243,7 @@ fun PlaylistScreen(
                                 )
                             )
                             .border(1.dp, Color(0x33FA243C), RoundedCornerShape(24.dp))
-                            .clickable { activeBuiltInPlaylist = "liked" }
+                            .clickable { com.arcadesoftware.musix.PlayerManager.activeBuiltInPlaylist.value = "liked" }
                             .padding(16.dp)
                     ) {
                         Column(
@@ -288,7 +284,7 @@ fun PlaylistScreen(
                                 )
                             )
                             .border(1.dp, Color(0x3322C55E), RoundedCornerShape(24.dp))
-                            .clickable { activeBuiltInPlaylist = "downloads" }
+                            .clickable { com.arcadesoftware.musix.PlayerManager.activeBuiltInPlaylist.value = "downloads" }
                             .padding(16.dp)
                     ) {
                         Column(
@@ -773,7 +769,7 @@ fun PlaylistScreen(
             BuiltInPlaylistDetailScreen(
                 type = type,
                 backdrop = backdrop,
-                onBack = { activeBuiltInPlaylist = null },
+                onBack = { com.arcadesoftware.musix.PlayerManager.activeBuiltInPlaylist.value = null },
                 onOptionsClick = { optionsSong = it }
             )
         }
@@ -1533,23 +1529,19 @@ private fun UserPlaylistDetailScreen(
                                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.89f, 0.1f)
                                 )
                             ) {
-                                Box(
+                                LiquidButton(
+                                    onClick = {},
+                                    backdrop = backdrop,
+                                    isInteractive = false,
+                                    surfaceColor = popupSurfaceColor.copy(alpha = 0.65f),
+                                    blurRadius = 16.dp,
+                                    lensRadius = 8.dp,
+                                    lensOffset = 24.dp,
+                                    shape = { RoundedCornerShape(20.dp) },
                                     modifier = Modifier
                                         .width(220.dp)
                                         .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f))
-                                        .drawBackdrop(
-                                            backdrop = backdrop,
-                                            shape = { RoundedCornerShape(20.dp) },
-                                            effects = {
-                                                vibrancy()
-                                                blur(16f.dp.toPx())
-                                                lens(8f.dp.toPx(), 24f.dp.toPx())
-                                            },
-                                            onDrawSurface = {
-                                                drawRect(popupSurfaceColor.copy(alpha = 0.65f))
-                                                drawRect(Color.Gray.copy(alpha = 0.15f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
-                                            }
-                                        )
+                                        .border(1.dp, Color.Gray.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
                                 ) {
                                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
                                         Row(
