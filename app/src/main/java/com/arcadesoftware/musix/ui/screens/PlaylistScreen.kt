@@ -7,6 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -1509,12 +1512,12 @@ private fun UserPlaylistDetailScreen(
                                         backdrop = backdrop,
                                         shape = { RoundedCornerShape(20.dp) },
                                         effects = {
-                                            com.kyant.backdrop.effects.vibrancy()
-                                            com.kyant.backdrop.effects.blur(16f.dp.toPx())
-                                            com.kyant.backdrop.effects.lens(8f.dp.toPx(), 24f.dp.toPx())
+                                            vibrancy()
+                                            blur(16f.dp.toPx())
+                                            lens(8f.dp.toPx(), 24f.dp.toPx())
                                         },
                                         onDrawSurface = {
-                                            drawRect(surfaceColor.copy(alpha = 0.5f))
+                                            drawRect(Color.White.copy(alpha = 0.65f))
                                             drawRect(Color.Gray.copy(alpha = 0.15f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
                                         }
                                     )
