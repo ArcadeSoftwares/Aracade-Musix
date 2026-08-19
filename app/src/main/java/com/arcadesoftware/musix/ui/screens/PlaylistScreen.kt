@@ -1443,7 +1443,7 @@ private fun UserPlaylistDetailScreen(
                         backdrop = backdrop,
                         isInteractive = false,
                         surfaceColor = MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
-                        modifier = Modifier.height(48.dp).widthIn(max = 160.dp)
+                        modifier = Modifier.height(48.dp).width(160.dp)
                     ) {
                         val isSpotifyImport = playlist.name.endsWith(" (Imported from Spotify)")
                         val displayName = if (isSpotifyImport) playlist.name.removeSuffix(" (Imported from Spotify)") else playlist.name
@@ -1459,42 +1459,64 @@ private fun UserPlaylistDetailScreen(
                 }
             }
 
-            // Top right buttons: Share, Edit & Download (if any song is not downloaded)
+            // Top right buttons: Download (if needed) & Hamburger Menu
             Row(
                 modifier = Modifier.align(Alignment.CenterEnd),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                LiquidButton(
-                    onClick = { /* Handle inside row for dynamic ripple effect */ },
-                    backdrop = backdrop,
-                    modifier = Modifier.height(48.dp),
-                    isInteractive = false
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                if (undownloadedSongs.isNotEmpty()) {
+                    LiquidButton(
+                        onClick = { triggerPlaylistDownload() },
+                        backdrop = backdrop,
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
-                            Icons.Rounded.QrCode,
-                            contentDescription = "Share Playlist",
+                            Icons.Rounded.Download,
+                            contentDescription = "Download Playlist",
                             tint = appleRed,
-                            modifier = Modifier.size(20.dp).clickable { showShareSheet = true }
+                            modifier = Modifier.size(20.dp)
                         )
+                    }
+                }
+
+                var showMoreMenu by remember { mutableStateOf(false) }
+                Box {
+                    LiquidButton(
+                        onClick = { showMoreMenu = true },
+                        backdrop = backdrop,
+                        modifier = Modifier.size(48.dp)
+                    ) {
                         Icon(
-                            Icons.Rounded.Edit,
-                            contentDescription = "Edit Playlist",
+                            Icons.Rounded.Menu,
+                            contentDescription = "More Options",
                             tint = appleRed,
-                            modifier = Modifier.size(20.dp).clickable { showEditSheet = true }
+                            modifier = Modifier.size(20.dp)
                         )
-                        if (undownloadedSongs.isNotEmpty()) {
-                            Icon(
-                                Icons.Rounded.Download,
-                                contentDescription = "Download Playlist",
-                                tint = appleRed,
-                                modifier = Modifier.size(20.dp).clickable { triggerPlaylistDownload() }
-                            )
-                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Share QR Code", fontWeight = FontWeight.Medium) },
+                            leadingIcon = { Icon(Icons.Rounded.QrCode, contentDescription = null, tint = appleRed) },
+                            onClick = {
+                                showMoreMenu = false
+                                showShareSheet = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Edit Playlist", fontWeight = FontWeight.Medium) },
+                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null, tint = appleRed) },
+                            onClick = {
+                                showMoreMenu = false
+                                showEditSheet = true
+                            }
+                        )
                     }
                 }
             }
