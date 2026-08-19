@@ -1528,25 +1528,17 @@ private fun UserPlaylistDetailScreen(
                                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.89f, 0.1f)
                                 )
                             ) {
-                                Box(
+                                LiquidButton(
+                                    onClick = {}, // not interactive on its own
+                                    backdrop = backdrop,
+                                    isInteractive = false,
+                                    surfaceColor = popupSurfaceColor.copy(alpha = 0.65f),
+                                    shape = { RoundedCornerShape(20.dp) },
                                     modifier = Modifier
                                         .width(220.dp)
                                         .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f))
-                                        .drawBackdrop(
-                                            backdrop = backdrop,
-                                            shape = { RoundedCornerShape(20.dp) },
-                                            effects = {
-                                                vibrancy()
-                                                blur(16f.dp.toPx())
-                                                lens(8f.dp.toPx(), 24f.dp.toPx())
-                                            },
-                                            onDrawSurface = {
-                                                drawRect(popupSurfaceColor.copy(alpha = 0.65f))
-                                                drawRect(Color.Gray.copy(alpha = 0.15f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
-                                            }
-                                        )
                                 ) {
-                                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                    Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
