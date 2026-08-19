@@ -4318,7 +4318,7 @@ fun MiniPlayer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .padding(horizontal = if (isFab) 6.dp else 8.dp),
+                    .padding(horizontal = if (isFab) 4.dp else 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -4523,30 +4523,53 @@ fun MiniPlayer(
                         .padding(horizontal = 24.dp, vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Drag handle at the top — tappable + swipeable to collapse
+                    // Top Bar with Drag Handle and Close Button
                     Box(
-                        modifier = Modifier
-                            .padding(vertical = 12.dp)
-                            .pointerInput(Unit) {
-                                detectVerticalDragGestures(
-                                    onVerticalDrag = { _, dragAmount ->
-                                        if (dragAmount > 8f) expanded = false
-                                    }
-                                )
-                            }
-                            .clickable(
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                indication = null
-                            ) { expanded = false }
-                            .padding(horizontal = 40.dp, vertical = 12.dp),
-                        contentAlignment = Alignment.Center
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
                     ) {
+                        // Drag handle at the top — tappable + swipeable to collapse
                         Box(
                             modifier = Modifier
-                                .width(40.dp)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(contentColor.copy(alpha = 0.3f))
+                                .align(Alignment.Center)
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onVerticalDrag = { _, dragAmount ->
+                                            if (dragAmount > 8f) expanded = false
+                                        }
+                                    )
+                                }
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) { expanded = false }
+                                .padding(horizontal = 40.dp, vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(40.dp)
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(contentColor.copy(alpha = 0.3f))
+                            )
+                        }
+
+                        // Close button to completely stop music
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Stop Player",
+                            tint = contentColor.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .size(28.dp)
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    focusManager.clearFocus()
+                                    expanded = false
+                                    PlayerManager.stopAll()
+                                }
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
