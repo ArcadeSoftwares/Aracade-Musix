@@ -1362,6 +1362,60 @@ private fun UserPlaylistDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                val item = selectedSong.toSongItem()
+                                PlayerManager.play(item)
+                                showSongOptionsSheet = null
+                            }
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Play", style = MaterialTheme.typography.bodyLarge)
+                    }
+
+                    if (downloadedIds.contains(selectedSong.id)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    PlayerManager.cancelDownload(selectedSong.id)
+                                    scope.launch(Dispatchers.IO) {
+                                        db.musicDao().removeDownloadedSong(selectedSong.id)
+                                        val file = java.io.File(context.filesDir, "downloads/${selectedSong.id}.m4a")
+                                        if (file.exists()) file.delete()
+                                    }
+                                    showSongOptionsSheet = null
+                                }
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("Remove Download", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    PlayerManager.startDownload(selectedSong.toSongItem(), context, groupName = playlist.name)
+                                    Toast.makeText(context, "Downloading...", Toast.LENGTH_SHORT).show()
+                                    showSongOptionsSheet = null
+                                }
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Rounded.Download, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("Download", style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
                                 scope.launch(Dispatchers.IO) {
                                     db.musicDao().removeSongFromPlaylist(playlist.id, selectedSong.id)
                                     com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
@@ -1374,28 +1428,6 @@ private fun UserPlaylistDetailScreen(
                         Icon(Icons.Rounded.PlaylistRemove, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.width(16.dp))
                         Text("Remove from playlist", style = MaterialTheme.typography.bodyLarge)
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                PlayerManager.cancelDownload(selectedSong.id)
-                                scope.launch(Dispatchers.IO) {
-                                    db.musicDao().removeDownloadedSong(selectedSong.id)
-                                    val file = java.io.File(context.filesDir, "downloads/${selectedSong.id}.m4a")
-                                    if (file.exists()) file.delete()
-                                    db.musicDao().removeSongFromPlaylist(playlist.id, selectedSong.id)
-                                    com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
-                                }
-                                showSongOptionsSheet = null
-                            }
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("Delete this music", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
                     }
                     Spacer(modifier = Modifier.height(32.dp))
                 }
