@@ -132,6 +132,9 @@ fun PlaylistScreen(
     val optionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showAddToPlaylistForSong by remember { mutableStateOf<DownloadedSongEntity?>(null) }
     var showImportSheet by remember { mutableStateOf(false) }
+    var isImportingSpotify by remember { mutableStateOf(false) }
+    var spotifyImportProgress by remember { mutableFloatStateOf(0f) }
+    var spotifyImportStatus by remember { mutableStateOf("") }
     var newPlaylistNameInput by remember { mutableStateOf("") }
     val selectedUserPlaylist by PlayerManager.activeUserPlaylist.collectAsState()
     var activeBuiltInPlaylist by remember { mutableStateOf<String?>(null) } // "liked" or "downloads"
@@ -149,6 +152,25 @@ fun PlaylistScreen(
     }
 
     var playlistToDelete by remember { mutableStateOf<com.arcadesoftware.musix.db.entities.PlaylistEntity?>(null) }
+
+    if (isImportingSpotify) {
+        AlertDialog(
+            onDismissRequest = { /* Cannot dismiss */ },
+            title = { Text("Importing Spotify Playlist", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(spotifyImportStatus, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LinearProgressIndicator(
+                        progress = { spotifyImportProgress },
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                        color = Color(0xFF1DB954)
+                    )
+                }
+            },
+            confirmButton = {}
+        )
+    }
 
     if (playlistToDelete != null) {
         AlertDialog(
@@ -629,9 +651,88 @@ fun PlaylistScreen(
                 }
                 showImportSheet = false
             },
-            onSpotifyImport = { _ ->
-                // Spotify import handled by the sheet itself; dismiss here
+            onSpotifyImport = { playlistId ->
                 showImportSheet = false
+                isImportingSpotify = true
+                spotifyImportStatus = "Fetching Spotify Playlist..."
+                spotifyImportProgress = 0f
+                viewModel.viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val db = com.arcadesoftware.musix.db.AppDatabase.getDatabase(context)
+                        val url = java.net.URL("https://open.spotify.com/embed/playlist/$playlistId")
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "GET"
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                        val html = conn.inputStream.bufferedReader().readText()
+
+                        val regex = Regex("<script id=\"__NEXT_DATA__\" type=\"application/json\">(.*?)</script>")
+                        val match = regex.find(html)
+                        if (match == null) {
+                            withContext(Dispatchers.Main) {
+                                isImportingSpotify = false
+                                android.widget.Toast.makeText(context, "Could not fetch Spotify playlist.", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            return@launch
+                        }
+
+                        val jsonStr = match.groupValues[1]
+                        val json = org.json.JSONObject(jsonStr)
+                        val entity = json.getJSONObject("props").getJSONObject("pageProps").getJSONObject("state").getJSONObject("data").getJSONObject("entity")
+                        val playlistName = entity.getString("name")
+                        val trackList = entity.getJSONArray("trackList")
+
+                        val newPlaylist = com.arcadesoftware.musix.db.entities.PlaylistEntity(
+                            name = "$playlistName (Imported from Spotify)",
+                            createdAt = System.currentTimeMillis()
+                        )
+                        val dbPlaylistId = db.musicDao().insertPlaylist(newPlaylist)
+
+                        val total = trackList.length()
+                        var added = 0
+                        for (i in 0 until total) {
+                            val track = trackList.getJSONObject(i)
+                            val title = track.getString("title")
+                            val subtitle = track.optString("subtitle", "")
+
+                            withContext(Dispatchers.Main) {
+                                spotifyImportStatus = "Importing: $title"
+                                spotifyImportProgress = (i.toFloat() / total)
+                            }
+
+                            val searchQuery = "$title $subtitle"
+                            val searchResult = com.music.innertube.YouTube.search(searchQuery, com.music.innertube.YouTube.SearchFilter.FILTER_SONG)
+
+                            searchResult.getOrNull()?.items?.filterIsInstance<com.music.innertube.models.SongItem>()?.firstOrNull()?.let { song ->
+                                val historyEntity = com.arcadesoftware.musix.db.entities.PlayHistoryEntity(
+                                    id = song.id,
+                                    title = song.title,
+                                    artistName = song.artists.joinToString(", ") { it.name },
+                                    artistId = song.artists.firstOrNull()?.id,
+                                    thumbnailUrl = song.thumbnail
+                                )
+                                db.musicDao().insertPlayHistory(historyEntity)
+                                db.musicDao().insertPlaylistSong(
+                                    com.arcadesoftware.musix.db.entities.PlaylistSongEntity(
+                                        playlistId = dbPlaylistId,
+                                        songId = song.id,
+                                        position = i
+                                    )
+                                )
+                                added++
+                            }
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            isImportingSpotify = false
+                            android.widget.Toast.makeText(context, "Imported $added/$total songs to '$playlistName'", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            isImportingSpotify = false
+                            android.widget.Toast.makeText(context, "Import failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
             }
         )
     }
@@ -875,8 +976,12 @@ private fun UserPlaylistDetailScreen(
                         }
 
                         Spacer(modifier = Modifier.height(24.dp))
+                        
+                        val isSpotifyImport = playlist.name.endsWith(" (Imported from Spotify)")
+                        val displayName = if (isSpotifyImport) playlist.name.removeSuffix(" (Imported from Spotify)") else playlist.name
+
                         Text(
-                            text = playlist.name,
+                            text = displayName,
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 23.sp),
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 2,
@@ -884,11 +989,24 @@ private fun UserPlaylistDetailScreen(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "${songs.size} songs",
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium, color = appleRed, fontSize = 17.sp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
+                        
+                        // Let's compute total duration in minutes if possible?
+                        // PlayHistoryEntity doesn't have duration.
+                        // For now we just show song count + Spotify Tag
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                            Text(
+                                text = "${songs.size} songs",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium, color = appleRed, fontSize = 17.sp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            if (isSpotifyImport) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF1DB954).copy(alpha = 0.2f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                    Text("Imported from Spotify", color = Color(0xFF1DB954), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1326,8 +1444,11 @@ private fun UserPlaylistDetailScreen(
                         surfaceColor = MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
                         modifier = Modifier.height(48.dp).widthIn(min = 120.dp, max = 220.dp)
                     ) {
+                        val isSpotifyImport = playlist.name.endsWith(" (Imported from Spotify)")
+                        val displayName = if (isSpotifyImport) playlist.name.removeSuffix(" (Imported from Spotify)") else playlist.name
+
                         Text(
-                            text = playlist.name,
+                            text = displayName,
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 17.sp),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1530,9 +1651,13 @@ private fun UserPlaylistCard(
     val thumbnail = playlist.coverUri
         ?: if (songs.isNotEmpty()) songs.first().thumbnailUrl else null
 
+    val isSpotifyImport = playlist.name.endsWith(" (Imported from Spotify)")
+    val displayName = if (isSpotifyImport) playlist.name.removeSuffix(" (Imported from Spotify)") else playlist.name
+    val subtitleText = if (isSpotifyImport) "${songs.size} songs • Spotify" else "${songs.size} songs"
+
     PlaylistCard(
-        title = playlist.name,
-        subtitle = "${songs.size} songs",
+        title = displayName,
+        subtitle = subtitleText,
         thumbnail = thumbnail,
         onClick = onClick,
         onDeleteClick = onDeleteClick

@@ -123,17 +123,17 @@ fun SearchScreen(onBack: () -> Unit) {
 
     LaunchedEffect(query) {
         if (query.isNotBlank()) {
-            delay(1000)
-            isLoading = true
+            results = emptyList() // clear results to show suggestions
+            // delay to debounce typing
+            delay(300)
             scope.launch(Dispatchers.IO) {
-                val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG)
+                val suggestionResult = YouTube.searchSuggestions(query)
                 withContext(Dispatchers.Main) {
-                    searchResult.onSuccess { result ->
-                        results = result.items.filterIsInstance<SongItem>()
+                    suggestionResult.onSuccess { result ->
+                        suggestions = result.queries
                     }.onFailure {
-                        results = emptyList()
+                        suggestions = emptyList()
                     }
-                    isLoading = false
                 }
             }
         } else {
@@ -394,6 +394,25 @@ fun SearchSongRow(song: SongItem, onClick: () -> Unit, onAddClick: () -> Unit) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
+            song.duration?.let { dur ->
+                val mins = dur / 60
+                val secs = dur % 60
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = String.format("%d:%02d", mins, secs),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.width(16.dp))
