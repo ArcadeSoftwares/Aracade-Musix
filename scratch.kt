@@ -6,3 +6,5 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.platform.LocalConfiguration

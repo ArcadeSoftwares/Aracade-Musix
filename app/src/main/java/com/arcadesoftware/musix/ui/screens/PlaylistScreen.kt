@@ -1507,83 +1507,132 @@ private fun UserPlaylistDetailScreen(
 
                     if (showMoreMenu) {
                         androidx.compose.ui.window.Popup(
-                            alignment = Alignment.TopEnd,
-                            offset = androidx.compose.ui.unit.IntOffset(0, 140),
+                            alignment = Alignment.Center,
+                            properties = androidx.compose.ui.window.PopupProperties(
+                                focusable = true,
+                                usePlatformDefaultWidth = false
+                            ),
                             onDismissRequest = { menuTransitionState.targetState = false }
                         ) {
-                            androidx.compose.animation.AnimatedVisibility(
-                                visibleState = menuTransitionState,
-                                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)),
-                                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(220.dp)
-                                        .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
-                                        .drawBackdrop(
-                                            backdrop = backdrop,
-                                            shape = { RoundedCornerShape(20.dp) },
-                                            effects = {
-                                                vibrancy()
-                                                blur(16f.dp.toPx())
-                                                lens(8f.dp.toPx(), 24f.dp.toPx())
-                                            },
-                                            onDrawSurface = {
-                                                drawRect(popupSurfaceColor.copy(alpha = 0.65f))
-                                                drawRect(Color.Gray.copy(alpha = 0.15f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
-                                            }
-                                        )
+                            val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
+                            val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+                            
+                            Box(modifier = Modifier.size(screenWidth, screenHeight)) {
+                                // Full screen blur overlay
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visibleState = menuTransitionState,
+                                    enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)),
+                                    exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))
                                 ) {
-                                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { menuTransitionState.targetState = false; showShareSheet = true }
-                                                .padding(horizontal = 20.dp, vertical = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(Icons.Rounded.QrCode, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Text("Share QR Code", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                                        }
-                                        HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp))
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { menuTransitionState.targetState = false; showEditSheet = true }
-                                                .padding(horizontal = 20.dp, vertical = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(Icons.Rounded.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Text("Edit Playlist", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                                        }
-                                        HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp))
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { 
-                                                    menuTransitionState.targetState = false
-                                                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                                        db.musicDao().deletePlaylist(playlist.id)
-                                                        com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
-                                                    }
-                                                    onBack()
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .drawBackdrop(
+                                                backdrop = backdrop,
+                                                shape = { androidx.compose.ui.graphics.RectangleShape },
+                                                effects = {
+                                                    blur(24f.dp.toPx())
+                                                    vibrancy()
+                                                },
+                                                onDrawSurface = {
+                                                    drawRect(Color.Black.copy(alpha = 0.45f))
                                                 }
-                                                .padding(horizontal = 20.dp, vertical = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(22.dp))
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Text("Delete", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Color.Red)
+                                            )
+                                            .clickable(
+                                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                                indication = null,
+                                                onClick = { menuTransitionState.targetState = false }
+                                            )
+                                    )
+                                }
+
+                                // Menu itself
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visibleState = menuTransitionState,
+                                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(
+                                        animationSpec = androidx.compose.animation.core.spring(
+                                            dampingRatio = 0.65f,
+                                            stiffness = 400f
+                                        ),
+                                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
+                                    ),
+                                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(
+                                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
+                                    ),
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .statusBarsPadding()
+                                        .padding(top = 60.dp, end = 20.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(220.dp)
+                                            .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
+                                            .drawBackdrop(
+                                                backdrop = backdrop,
+                                                shape = { RoundedCornerShape(20.dp) },
+                                                effects = {
+                                                    vibrancy()
+                                                    blur(16f.dp.toPx())
+                                                    lens(8f.dp.toPx(), 24f.dp.toPx())
+                                                },
+                                                onDrawSurface = {
+                                                    drawRect(popupSurfaceColor.copy(alpha = 0.65f))
+                                                    drawRect(Color.Gray.copy(alpha = 0.15f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
+                                                }
+                                            )
+                                    ) {
+                                        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { menuTransitionState.targetState = false; showShareSheet = true }
+                                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Rounded.QrCode, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Text("Share QR Code", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                            }
+                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp))
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { menuTransitionState.targetState = false; showEditSheet = true }
+                                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Rounded.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Text("Edit Playlist", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                            }
+                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(horizontal = 20.dp))
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { 
+                                                        menuTransitionState.targetState = false
+                                                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                                            db.musicDao().deletePlaylist(playlist.id)
+                                                            com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
+                                                        }
+                                                        onBack()
+                                                    }
+                                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(22.dp))
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Text("Delete", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Color.Red)
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            androidx.compose.runtime.LaunchedEffect(menuTransitionState.currentState, menuTransitionState.targetState) {
-                                if (!menuTransitionState.targetState && !menuTransitionState.currentState) {
-                                    showMoreMenu = false
+                                androidx.compose.runtime.LaunchedEffect(menuTransitionState.currentState, menuTransitionState.targetState) {
+                                    if (!menuTransitionState.targetState && !menuTransitionState.currentState) {
+                                        showMoreMenu = false
+                                    }
                                 }
                             }
                         }
