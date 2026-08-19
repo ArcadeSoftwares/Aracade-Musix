@@ -217,35 +217,44 @@ object PlayerManager {
 
     // Complete client order mirroring Echo-Music to check all playback possibilities
     private val CLIENTS = arrayOf(
+        YouTubeClient.VISIONOS,
+        YouTubeClient.ANDROID_NO_SDK,
+        YouTubeClient.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+        YouTubeClient.TVHTML5,
+        YouTubeClient.IOS,
+        YouTubeClient.IPADOS,
+        YouTubeClient.MOBILE,
         YouTubeClient.ANDROID_VR_NO_AUTH,
         YouTubeClient.ANDROID_VR_1_43_32,
         YouTubeClient.ANDROID_VR_1_61_48,
-        YouTubeClient.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-        YouTubeClient.TVHTML5,
         YouTubeClient.ANDROID_CREATOR,
-        YouTubeClient.IPADOS,
-        YouTubeClient.IOS,
         YouTubeClient.WEB,
         YouTubeClient.WEB_REMIX,
         YouTubeClient.WEB_CREATOR,
-        YouTubeClient.MOBILE,
-        YouTubeClient.ANDROID_NO_SDK,
     )
 
     private fun validateUrl(urlStr: String, userAgent: String): Boolean {
         return try {
             val url = java.net.URL(urlStr)
             val connection = url.openConnection() as java.net.HttpURLConnection
-            connection.requestMethod = "HEAD"
+            connection.requestMethod = "GET"
             connection.setRequestProperty("User-Agent", userAgent)
+            connection.setRequestProperty("Range", "bytes=0-1024")
             connection.connectTimeout = 3000
             connection.readTimeout = 3000
 
             val responseCode = connection.responseCode
             android.util.Log.d(TAG, "Validation response for URL: $responseCode")
 
-            // Accept 2xx success codes or 3xx redirects
-            responseCode in 200..399
+            if (responseCode in 200..399) {
+                // Read a byte to ensure we don't get a late 403 from the CDN
+                val inputStream = connection.inputStream
+                inputStream.read()
+                inputStream.close()
+                true
+            } else {
+                false
+            }
         } catch (e: Exception) {
             android.util.Log.e(TAG, "URL validation failed with exception: ${e.message}")
             false
@@ -428,8 +437,7 @@ object PlayerManager {
                 httpDataSourceFactory
             ) { dataSpec ->
                 dataSpec.withAdditionalHeaders(mapOf(
-                    "User-Agent" to activeUserAgent,
-                    "Referer" to "https://www.youtube.com/"
+                    "User-Agent" to activeUserAgent
                 ))
             }
 
@@ -526,11 +534,11 @@ object PlayerManager {
                                                 playInternal(newQueue[currentIndex + 1])
                                             } else {
                                                 releaseWakeLock()
-                                                exoPlayer?.playWhenReady = false
+                                                android.os.Handler(android.os.Looper.getMainLooper()).post { exoPlayer?.playWhenReady = false }
                                             }
                                         }.onFailure {
                                             releaseWakeLock()
-                                            exoPlayer?.playWhenReady = false
+                                            android.os.Handler(android.os.Looper.getMainLooper()).post { exoPlayer?.playWhenReady = false }
                                         }
                                     }
                                 } ?: run {
@@ -899,8 +907,10 @@ object PlayerManager {
             if (resolvedSong == null) {
                 android.util.Log.e(TAG, "Could not resolve a song for item: $item")
                 releaseWakeLock()
-                exoPlayer?.playWhenReady = false
-                android.os.Handler(android.os.Looper.getMainLooper()).post { triggerNotificationUpdate() }
+                android.os.Handler(android.os.Looper.getMainLooper()).post { 
+                    exoPlayer?.playWhenReady = false
+                    triggerNotificationUpdate() 
+                }
                 return@launch
             }
 
@@ -1035,8 +1045,10 @@ object PlayerManager {
             } else {
                 android.util.Log.e(TAG, "All clients failed for videoId=$videoId")
                 releaseWakeLock()
-                exoPlayer?.playWhenReady = false
-                android.os.Handler(android.os.Looper.getMainLooper()).post { triggerNotificationUpdate() }
+                android.os.Handler(android.os.Looper.getMainLooper()).post { 
+                    exoPlayer?.playWhenReady = false
+                    triggerNotificationUpdate() 
+                }
             }
         }
     }
