@@ -304,6 +304,41 @@ object PlayerManager {
                 seekOnPreparePosition = null
             }
 
+            if (shouldResume) {
+                val savedQueueStr = prefs.getString("last_queue", null)
+                val savedIndex = prefs.getInt("last_queue_index", 0)
+                if (savedQueueStr != null) {
+                    try {
+                        val arr = org.json.JSONArray(savedQueueStr)
+                        val loadedQueue = mutableListOf<YTItem>()
+                        for (i in 0 until arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            val artistsArr = obj.getJSONArray("artists")
+                            val artists = mutableListOf<Artist>()
+                            for (j in 0 until artistsArr.length()) {
+                                val aObj = artistsArr.getJSONObject(j)
+                                artists.add(Artist(
+                                    name = aObj.getString("name"),
+                                    id = if (aObj.has("id")) aObj.getString("id") else null
+                                ))
+                            }
+                            loadedQueue.add(SongItem(
+                                id = obj.getString("id"),
+                                title = obj.getString("title"),
+                                artists = artists,
+                                thumbnail = obj.getString("thumbnail"),
+                                duration = obj.getInt("duration")
+                            ))
+                        }
+                        queue.value = loadedQueue
+                        originalQueue.value = loadedQueue
+                        currentQueueIndex.value = savedIndex
+                    } catch (e: Exception) {
+                        android.util.Log.e(TAG, "Failed to parse saved queue", e)
+                    }
+                }
+            }
+
             // Initialize platform MediaSession
             val session = android.media.session.MediaSession(context, "MusixPlayer").apply {
                 isActive = true
@@ -614,10 +649,19 @@ object PlayerManager {
             val response = YouTube.player(videoId = videoId, client = client, signatureTimestamp = signatureTimestamp)
             response.onSuccess { playerResponse ->
                 if (playerResponse.playabilityStatus.status != "OK") return@onSuccess
-                val format = playerResponse.streamingData?.adaptiveFormats
+                val audioQualityPref = appContext?.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)?.getInt("audio_quality_level", 1) ?: 1
+                val audioFormats = playerResponse.streamingData?.adaptiveFormats
                     ?.filter { it.mimeType.startsWith("audio/") }
-                    ?.maxByOrNull { it.bitrate }
-                    ?: playerResponse.streamingData?.formats?.firstOrNull()
+                    ?.sortedBy { it.bitrate }
+                val format = if (!audioFormats.isNullOrEmpty()) {
+                    when (audioQualityPref) {
+                        0 -> audioFormats.first()
+                        1 -> audioFormats[audioFormats.size / 2]
+                        else -> audioFormats.last()
+                    }
+                } else {
+                    playerResponse.streamingData?.formats?.firstOrNull()
+                }
                 if (format != null) {
                     val url = com.music.innertube.NewPipeExtractor.getStreamUrl(format, videoId)
                     if (url != null) {
@@ -990,11 +1034,20 @@ object PlayerManager {
 
                         if (status != "OK") return@onSuccess
 
-                        // Prefer audio-only adaptive formats, then fall back to combined formats
-                        val format = playerResponse.streamingData?.adaptiveFormats
+                        val audioQualityPref = appContext?.getSharedPreferences("musix_profile_settings", Context.MODE_PRIVATE)?.getInt("audio_quality_level", 1) ?: 1
+                        val audioFormats = playerResponse.streamingData?.adaptiveFormats
                             ?.filter { it.mimeType.startsWith("audio/") }
-                            ?.maxByOrNull { it.bitrate }
-                            ?: playerResponse.streamingData?.formats?.firstOrNull()
+                            ?.sortedBy { it.bitrate }
+                            
+                        val format = if (!audioFormats.isNullOrEmpty()) {
+                            when (audioQualityPref) {
+                                0 -> audioFormats.first()
+                                1 -> audioFormats[audioFormats.size / 2]
+                                else -> audioFormats.last()
+                            }
+                        } else {
+                            playerResponse.streamingData?.formats?.firstOrNull()
+                        }
 
                         if (format != null) {
                             val url = com.music.innertube.NewPipeExtractor.getStreamUrl(format, videoId)
@@ -1101,6 +1154,27 @@ object PlayerManager {
         val dur = currentDuration.value
         if (song.id.isNotEmpty()) {
             val prefs = context.getSharedPreferences("musix_playback_state", Context.MODE_PRIVATE)
+            
+            val queueJson = org.json.JSONArray()
+            queue.value.forEach { item ->
+                if (item is SongItem) {
+                    val obj = org.json.JSONObject()
+                    obj.put("id", item.id)
+                    obj.put("title", item.title)
+                    val artistsArr = org.json.JSONArray()
+                    item.artists.forEach { artist ->
+                        val artistObj = org.json.JSONObject()
+                        artistObj.put("name", artist.name)
+                        if (artist.id != null) artistObj.put("id", artist.id)
+                        artistsArr.put(artistObj)
+                    }
+                    obj.put("artists", artistsArr)
+                    obj.put("thumbnail", item.thumbnail)
+                    obj.put("duration", item.duration ?: 0)
+                    queueJson.put(obj)
+                }
+            }
+            
             prefs.edit().apply {
                 putString("last_song_id", song.id)
                 putString("last_song_title", song.title)
@@ -1108,6 +1182,8 @@ object PlayerManager {
                 putString("last_song_thumbnail", song.thumbnail)
                 putLong("last_song_duration", dur)
                 putLong("last_song_position", pos)
+                putString("last_queue", queueJson.toString())
+                putInt("last_queue_index", currentQueueIndex.value)
                 apply()
             }
         }
