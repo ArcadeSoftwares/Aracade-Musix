@@ -1469,6 +1469,7 @@ private fun UserPlaylistDetailScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 var showMoreMenu by remember { mutableStateOf(false) }
+                var showDeleteDialog by remember { mutableStateOf(false) }
                 val menuTransitionState = remember { androidx.compose.animation.core.MutableTransitionState(false) }
                 val popupSurfaceColor = MaterialTheme.colorScheme.surface
 
@@ -1580,11 +1581,7 @@ private fun UserPlaylistDetailScreen(
                                                 .fillMaxWidth()
                                                 .clickable { 
                                                     showMoreMenu = false
-                                                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                                        db.musicDao().deletePlaylist(playlist.id)
-                                                        com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
-                                                    }
-                                                    onBack()
+                                                    showDeleteDialog = true
                                                 }
                                                 .padding(horizontal = 20.dp, vertical = 14.dp),
                                             verticalAlignment = Alignment.CenterVertically
@@ -1597,6 +1594,31 @@ private fun UserPlaylistDetailScreen(
                                 }
                             }
                         }
+                    }
+
+                    if (showDeleteDialog) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { showDeleteDialog = false },
+                            title = { Text("Delete Playlist") },
+                            text = { Text("Are you sure you want to delete this playlist? This action cannot be undone.") },
+                            confirmButton = {
+                                androidx.compose.material3.TextButton(onClick = {
+                                    showDeleteDialog = false
+                                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        db.musicDao().deletePlaylist(playlist.id)
+                                        com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
+                                    }
+                                    onBack()
+                                }) {
+                                    Text("Delete", color = Color.Red)
+                                }
+                            },
+                            dismissButton = {
+                                androidx.compose.material3.TextButton(onClick = { showDeleteDialog = false }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        )
                     }
                 }
             }

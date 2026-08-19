@@ -1935,6 +1935,14 @@ fun MainScreen() {
         }
         
         try {
+            // Track total unique users by device ID (consistent across reinstalls)
+            val deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+            if (deviceId != null) {
+                val usersRef = com.google.firebase.database.FirebaseDatabase.getInstance()
+                    .getReference("com_arcadesoftware_musix").child("total_users").child(deviceId)
+                usersRef.child("last_active").setValue(System.currentTimeMillis())
+            }
+
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             val currentAppVersionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                 packageInfo.longVersionCode.toInt()
