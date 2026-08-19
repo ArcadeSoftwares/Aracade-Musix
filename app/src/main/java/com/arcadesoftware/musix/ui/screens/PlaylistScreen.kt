@@ -681,8 +681,37 @@ fun PlaylistScreen(
                         val playlistName = entity.getString("name")
                         val trackList = entity.getJSONArray("trackList")
 
+                        // Extract playlist cover image from Spotify embed data
+                        val spotifyCoverUrl: String? = try {
+                            // Try visuals.avatarImage.sources[0].url first, then fallback paths
+                            val visuals = entity.optJSONObject("visuals")
+                            val headerImage = visuals?.optJSONObject("headerImage")
+                                ?: visuals?.optJSONObject("avatarImage")
+                            val sources = headerImage?.optJSONArray("sources")
+                            if (sources != null && sources.length() > 0) {
+                                // Pick highest resolution (usually the last or largest width)
+                                var bestUrl: String? = null
+                                var bestWidth = 0
+                                for (s in 0 until sources.length()) {
+                                    val src = sources.getJSONObject(s)
+                                    val w = src.optInt("width", 0)
+                                    val u = src.optString("url", "")
+                                    if (u.isNotEmpty() && w >= bestWidth) { bestUrl = u; bestWidth = w }
+                                }
+                                bestUrl
+                            } else {
+                                // Fallback: coverArt.sources
+                                val coverArt = entity.optJSONObject("coverArt")
+                                val coverSources = coverArt?.optJSONArray("sources")
+                                if (coverSources != null && coverSources.length() > 0) {
+                                    coverSources.getJSONObject(0).optString("url").takeIf { it.isNotEmpty() }
+                                } else null
+                            }
+                        } catch (e: Exception) { null }
+
                         val newPlaylist = com.arcadesoftware.musix.db.entities.PlaylistEntity(
                             name = "$playlistName (Imported from Spotify)",
+                            coverUri = spotifyCoverUrl,
                             createdAt = System.currentTimeMillis()
                         )
                         val dbPlaylistId = db.musicDao().insertPlaylist(newPlaylist)
@@ -1316,6 +1345,8 @@ private fun UserPlaylistDetailScreen(
                             onClick = {
                                 scope.launch(Dispatchers.IO) {
                                     db.musicDao().updatePlaylist(playlist.id, editName.trim(), editCoverUri)
+                                    // Push changes to Firestore so they survive app restarts
+                                    com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylistsSuspend(context)
                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                         com.arcadesoftware.musix.PlayerManager.activeUserPlaylist.value = playlist.copy(
                                             name = editName.trim(),
