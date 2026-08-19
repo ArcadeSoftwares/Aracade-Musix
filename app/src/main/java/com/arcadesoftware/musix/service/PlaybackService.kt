@@ -100,6 +100,7 @@ class PlaybackService : Service() {
                     PlayerManager.exoPlayer?.play()
                 }
                 "com.arcadesoftware.musix.ACTION_DISMISS" -> {
+                    PlayerManager.stopAll()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                     } else {
@@ -175,6 +176,12 @@ class PlaybackService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         instance = null
         isServiceRunning = false  // FIX: was missing — allowed start() to skip on restart
     }
