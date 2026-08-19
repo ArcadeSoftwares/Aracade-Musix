@@ -1477,10 +1477,16 @@ private fun UserPlaylistDetailScreen(
                 }
 
                 Box {
+                    val buttonAlpha by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = if (menuTransitionState.targetState) 0f else 1f,
+                        animationSpec = androidx.compose.animation.core.tween(150),
+                        label = "buttonAlpha"
+                    )
+
                     LiquidButton(
                         onClick = { showMoreMenu = true },
                         backdrop = backdrop,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(48.dp).alpha(buttonAlpha)
                     ) {
                         Icon(
                             Icons.Rounded.Menu,
@@ -1491,23 +1497,28 @@ private fun UserPlaylistDetailScreen(
                     }
 
                     if (showMoreMenu) {
-                        val yOffset = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.roundToPx() }
                         androidx.compose.ui.window.Popup(
                             alignment = Alignment.TopEnd,
-                            offset = androidx.compose.ui.unit.IntOffset(0, yOffset),
+                            offset = androidx.compose.ui.unit.IntOffset(0, 0), // Perfectly overlap the button
                             onDismissRequest = { menuTransitionState.targetState = false }
                         ) {
                             androidx.compose.animation.AnimatedVisibility(
                                 visibleState = menuTransitionState,
-                                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(
+                                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)) + androidx.compose.animation.scaleIn(
+                                    initialScale = 0.22f, // Button is ~20% the size of the menu width
                                     animationSpec = androidx.compose.animation.core.spring(
-                                        dampingRatio = 0.7f,
+                                        dampingRatio = 0.65f,
                                         stiffness = 300f
                                     ),
-                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.89f, 0.1f) // Center of the button
                                 ),
-                                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(
-                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
+                                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150)) + androidx.compose.animation.scaleOut(
+                                    targetScale = 0.22f,
+                                    animationSpec = androidx.compose.animation.core.spring(
+                                        dampingRatio = 0.8f,
+                                        stiffness = 400f
+                                    ),
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.89f, 0.1f)
                                 )
                             ) {
                                 Box(
