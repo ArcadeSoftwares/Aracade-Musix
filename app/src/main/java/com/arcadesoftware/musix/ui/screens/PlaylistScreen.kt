@@ -1472,19 +1472,18 @@ private fun UserPlaylistDetailScreen(
                 val menuTransitionState = remember { androidx.compose.animation.core.MutableTransitionState(false) }
                 val popupSurfaceColor = MaterialTheme.colorScheme.surface
 
-                if (showMoreMenu) {
-                    menuTransitionState.targetState = true
-                }
+                // Drive the animation state natively
+                menuTransitionState.targetState = showMoreMenu
 
                 androidx.compose.runtime.LaunchedEffect(listState.isScrollInProgress) {
-                    if (listState.isScrollInProgress && menuTransitionState.targetState) {
-                        menuTransitionState.targetState = false
+                    if (listState.isScrollInProgress && showMoreMenu) {
+                        showMoreMenu = false
                     }
                 }
 
                 Box {
                     val buttonAlpha by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (menuTransitionState.targetState) 0f else 1f,
+                        targetValue = if (menuTransitionState.targetState || menuTransitionState.currentState) 0f else 1f,
                         animationSpec = androidx.compose.animation.core.tween(150),
                         label = "buttonAlpha"
                     )
@@ -1502,7 +1501,7 @@ private fun UserPlaylistDetailScreen(
                         )
                     }
 
-                    if (showMoreMenu) {
+                    if (showMoreMenu || menuTransitionState.currentState) {
                         androidx.compose.ui.window.Popup(
                             alignment = Alignment.TopEnd,
                             offset = androidx.compose.ui.unit.IntOffset(0, 0), // Perfectly overlap the button
@@ -1511,7 +1510,6 @@ private fun UserPlaylistDetailScreen(
                                 dismissOnClickOutside = true
                             ),
                             onDismissRequest = { 
-                                menuTransitionState.targetState = false
                                 showMoreMenu = false 
                             }
                         ) {
@@ -1534,21 +1532,29 @@ private fun UserPlaylistDetailScreen(
                                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.89f, 0.1f)
                                 )
                             ) {
-                                LiquidButton(
-                                    onClick = {}, // not interactive on its own
-                                    backdrop = backdrop,
-                                    isInteractive = false,
-                                    surfaceColor = popupSurfaceColor.copy(alpha = 0.65f),
-                                    shape = { RoundedCornerShape(20.dp) },
+                                Box(
                                     modifier = Modifier
                                         .width(220.dp)
                                         .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f))
+                                        .drawBackdrop(
+                                            backdrop = backdrop,
+                                            shape = { RoundedCornerShape(20.dp) },
+                                            effects = {
+                                                vibrancy()
+                                                blur(16f.dp.toPx())
+                                                lens(8f.dp.toPx(), 24f.dp.toPx())
+                                            },
+                                            onDrawSurface = {
+                                                drawRect(popupSurfaceColor.copy(alpha = 0.65f))
+                                                drawRect(Color.Gray.copy(alpha = 0.15f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
+                                            }
+                                        )
                                 ) {
-                                    Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+                                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable { menuTransitionState.targetState = false; showShareSheet = true }
+                                                .clickable { showMoreMenu = false; showShareSheet = true }
                                                 .padding(horizontal = 20.dp, vertical = 14.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -1560,7 +1566,7 @@ private fun UserPlaylistDetailScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable { menuTransitionState.targetState = false; showEditSheet = true }
+                                                .clickable { showMoreMenu = false; showEditSheet = true }
                                                 .padding(horizontal = 20.dp, vertical = 14.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -1573,7 +1579,7 @@ private fun UserPlaylistDetailScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clickable { 
-                                                    menuTransitionState.targetState = false
+                                                    showMoreMenu = false
                                                     scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                                         db.musicDao().deletePlaylist(playlist.id)
                                                         com.arcadesoftware.musix.db.FirestoreSyncManager.syncPlaylists(context)
@@ -1588,11 +1594,6 @@ private fun UserPlaylistDetailScreen(
                                             Text("Delete", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Color.Red)
                                         }
                                     }
-                                }
-                            }
-                            androidx.compose.runtime.LaunchedEffect(menuTransitionState.currentState, menuTransitionState.targetState) {
-                                if (!menuTransitionState.targetState && !menuTransitionState.currentState) {
-                                    showMoreMenu = false
                                 }
                             }
                         }
