@@ -133,7 +133,7 @@ class PlaybackService : Service() {
         // Always replace the dummy notification with the actual rich media notification
         PlayerManager.triggerNotificationUpdate()
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     fun updateForegroundNotification(notification: Notification, isPlaying: Boolean) {
@@ -157,14 +157,8 @@ class PlaybackService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        if (PlayerManager.isPlaying.value == true) {
-            return // Keep playing in background when swiped away
-        }
-        PlayerManager.exoPlayer?.stop()
-        PlayerManager.exoPlayer?.release()
-        PlayerManager.exoPlayer = null
-        PlayerManager.isPlaying.value = false
-        // FIX: added API version guard (was unconditionally calling STOP_FOREGROUND_REMOVE)
+        // Always stop music when user clears the app from recents
+        PlayerManager.stopAll()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
