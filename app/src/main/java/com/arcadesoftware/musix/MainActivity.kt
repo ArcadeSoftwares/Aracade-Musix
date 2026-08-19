@@ -1940,9 +1940,21 @@ fun MainScreen() {
             // Track total unique users by device ID (consistent across reinstalls)
             val deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
             if (deviceId != null) {
-                val usersRef = com.google.firebase.database.FirebaseDatabase.getInstance()
-                    .getReference("com_arcadesoftware_musix").child("total_users").child(deviceId)
-                usersRef.child("last_active").setValue(System.currentTimeMillis())
+                val totalUsersRef = com.google.firebase.database.FirebaseDatabase.getInstance()
+                    .getReference("com_arcadesoftware_musix").child("total_users")
+                
+                val deviceRef = totalUsersRef.child(deviceId)
+                deviceRef.child("last_active").addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
+                    override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                        if (!snapshot.exists()) {
+                            // First time this device is seen, increment the root count
+                            totalUsersRef.child("count").setValue(com.google.firebase.database.ServerValue.increment(1))
+                        }
+                        // Update the last active timestamp
+                        deviceRef.child("last_active").setValue(System.currentTimeMillis())
+                    }
+                    override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+                })
             }
 
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
